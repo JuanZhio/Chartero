@@ -1,9 +1,9 @@
 <script lang="ts">
 import type { Options, SeriesPieOptions } from 'highcharts';
-import type { AttachmentHistory } from '$/history/history';
 import { Chart } from 'highcharts-vue';
 import Highcharts from '@/highcharts';
-import HistoryAnalyzer from '$/history/analyzer';
+import type { AttachmentHistory } from '$/history/history';
+import { getHistoryTitle } from '$/history/kernel';
 export default {
     components: { Chart },
     data() {
@@ -11,17 +11,19 @@ export default {
     },
     computed: {
         chartOpts() {
-            const ha = new HistoryAnalyzer(this.history);
             return {
-                series: this.history.map((his, idx) => ({
-                    type: 'pie',
-                    name: ha.titles[idx],
-                    visible: idx === 0,
-                    data: his.record.userIDs.map(id => ({
-                        name: Zotero.Users.getName(id),
-                        y: his.record.getUserTotalSeconds(id),
-                    }))
-                } as SeriesPieOptions)),
+                series: this.history.map(
+                    (his, idx) =>
+                        ({
+                            type: 'pie',
+                            name: getHistoryTitle(his),
+                            visible: idx === 0,
+                            data: his.record.userIDs.map(id => ({
+                                name: Zotero.Users.getName(id),
+                                y: his.record.getUserTotalSeconds(id),
+                            })),
+                        }) as SeriesPieOptions,
+                ),
             } as Options;
         },
         options() {

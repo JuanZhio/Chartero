@@ -168,9 +168,9 @@ export function getVisiblePublicationRanks(item: Zotero.Item) {
     return '';
 }
 
-function limitRankText(ranks: string) {
+function limitRankText(ranks: unknown) {
     const limit = Math.max(1, Number(addon.getPref('easyScholarRankLimit')) || 1);
-    return ranks
+    return String(ranks ?? '')
         .split(/\s*[|;]\s*/)
         .filter(Boolean)
         .slice(0, limit)
@@ -178,7 +178,9 @@ function limitRankText(ranks: string) {
 }
 
 function formatRankLabels(ranks: RankLabel[], item?: Zotero.Item) {
-    return limitRankLabels(filterRankLabels(getDisplayRankLabels(ranks, item))).map(rank => rank.label).join(' | ');
+    return limitRankLabels(filterRankLabels(getDisplayRankLabels(ranks, item)))
+        .map(rank => rank.label)
+        .join(' | ');
 }
 
 function getDisplayRankLabels(ranks: RankLabel[], item?: Zotero.Item) {
@@ -203,8 +205,8 @@ function limitRankLabels(ranks: RankLabel[]) {
     return [...officialRanks, ...customRanks];
 }
 
-export function sanitizePublicationRankText(ranks: string) {
-    return ranks
+export function sanitizePublicationRankText(ranks: unknown) {
+    return String(ranks ?? '')
         .split(/\s*[|;,]\s*/)
         .map(rank => rank.trim())
         .filter(rank => rank && !containsRawCustomRankCode(rank))
@@ -246,14 +248,14 @@ export async function getJournalRankDetails(item: Zotero.Item): Promise<JournalR
 }
 
 function getJournalRanks(journal: string) {
-    return journal ? journalCache.get(journal.toLocaleLowerCase()) ?? [] : [];
+    return journal ? (journalCache.get(journal.toLocaleLowerCase()) ?? []) : [];
 }
 
 function shouldFetchRanks(journal: string) {
     return Boolean(
         journal &&
-        String(addon.getPref('easyScholarSecretKey') || '').trim() &&
-        !journalCache.has(journal.toLocaleLowerCase())
+            String(addon.getPref('easyScholarSecretKey') || '').trim() &&
+            !journalCache.has(journal.toLocaleLowerCase()),
     );
 }
 
@@ -320,13 +322,15 @@ async function savePublicationRanks(cacheKey: string, ranks: RankLabel[]) {
     const itemIDs = pendingJournalItems.get(cacheKey);
     if (!itemIDs?.size) return;
 
-    await Promise.all(Array.from(itemIDs).map(async itemID => {
-        const item = Zotero.Items.get(itemID);
-        const rankText = item ? formatRankLabels(ranks, item) : '';
-        if (!rankText) return;
-        if (!item || addon.extraField.getExtraField(item, RANK_FIELD) == rankText) return;
-        await addon.extraField.setExtraField(item, RANK_FIELD, rankText);
-    }));
+    await Promise.all(
+        Array.from(itemIDs).map(async itemID => {
+            const item = Zotero.Items.get(itemID);
+            const rankText = item ? formatRankLabels(ranks, item) : '';
+            if (!rankText) return;
+            if (!item || addon.extraField.getExtraField(item, RANK_FIELD) == rankText) return;
+            await addon.extraField.setExtraField(item, RANK_FIELD, rankText);
+        }),
+    );
 }
 
 function wait(ms: number) {
@@ -395,7 +399,10 @@ function parsePublicationRanks(response: EasyScholarResponse, publicationName: s
     if (!isRecord(response.data)) return [];
 
     const data = response.data as EasyScholarData,
-        labels = [...parseOfficialRank(data.officialRank), ...parseCustomRank(data.customRank, publicationName)];
+        labels = [
+            ...parseOfficialRank(data.officialRank),
+            ...parseCustomRank(data.customRank, publicationName),
+        ];
     return unique(labels);
 }
 
@@ -420,7 +427,9 @@ function filterRankLabels(ranks: RankLabel[]) {
     return [...official, ...(showCustom ? custom : [])];
 }
 
-function getBooleanPref(key: 'easyScholarShowOfficialSelected' | 'easyScholarShowOfficialAllFallback' | 'easyScholarShowCustom') {
+function getBooleanPref(
+    key: 'easyScholarShowOfficialSelected' | 'easyScholarShowOfficialAllFallback' | 'easyScholarShowCustom',
+) {
     const value = addon.getPref(key) as unknown;
     return value === true || value === 'true' || value === 1 || value === '1';
 }
@@ -441,7 +450,7 @@ function collectOfficialRankLabels(value: unknown, source: RankSource): RankLabe
             return text ? { source, key, label: officialRankLabel(key, text) } : undefined;
         })
         .filter((item): item is RankLabel => Boolean(item))
-        .sort((a, b) => officialRankOrder(a.key) - officialRankOrder(b.key))
+        .sort((a, b) => officialRankOrder(a.key) - officialRankOrder(b.key));
 }
 
 function officialRankLabel(key: string, rank: string) {
@@ -504,9 +513,7 @@ function parseCustomRank(value: unknown, publicationName: string): RankLabel[] {
     const custom = value as CustomRank,
         infos = collectCustomRankInfo(custom.rankInfo),
         infoMap = new Map(
-            infos
-                .map(info => [normalizeText(info.uuid), info] as const)
-                .filter(([uuid]) => uuid),
+            infos.map(info => [normalizeText(info.uuid), info] as const).filter(([uuid]) => uuid),
         ),
         ranks = collectCustomRankValues(custom.rank);
 
@@ -536,7 +543,11 @@ function collectCustomRankValues(value: unknown): string[] {
         .filter(rank => !rank.endsWith('&&&'));
 }
 
-function customRankLabel(value: unknown, infoMap: Map<string, CustomRankInfo>, publicationName: string): RankLabel | undefined {
+function customRankLabel(
+    value: unknown,
+    infoMap: Map<string, CustomRankInfo>,
+    publicationName: string,
+): RankLabel | undefined {
     if (typeof value != 'string') return undefined;
     const [uuid = '', rankIndexText = ''] = value.split('&&&'),
         info = infoMap.get(uuid),
@@ -545,9 +556,7 @@ function customRankLabel(value: unknown, infoMap: Map<string, CustomRankInfo>, p
 
     const source = normalizeText(info?.abbName) || normalizeText(publicationName),
         rank = normalizeText(
-            info && Number.isInteger(rankIndex)
-                ? customRankText(info, rankIndex)
-                : rankIndexText
+            info && Number.isInteger(rankIndex) ? customRankText(info, rankIndex) : rankIndexText,
         );
     if (!source || !rank) return undefined;
     return { source: 'custom', key: source, label: `${source} ${rank}`, value: rank };
@@ -555,13 +564,9 @@ function customRankLabel(value: unknown, infoMap: Map<string, CustomRankInfo>, p
 
 function customRankText(info: CustomRankInfo, rankIndex: number) {
     const index = rankIndex > 0 ? rankIndex - 1 : rankIndex;
-    return [
-        info.oneRankText,
-        info.twoRankText,
-        info.threeRankText,
-        info.fourRankText,
-        info.fiveRankText,
-    ][index];
+    return [info.oneRankText, info.twoRankText, info.threeRankText, info.fourRankText, info.fiveRankText][
+        index
+    ];
 }
 
 function unique(values: RankLabel[]) {

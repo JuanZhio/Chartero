@@ -1,13 +1,13 @@
 <script lang="ts">
 import type { Options, SeriesWordcloudOptions } from 'highcharts';
 import { Chart } from 'highcharts-vue';
-import Highcharts from '@/highcharts';
 import StopWords from 'stopwords-iso';
-import HistoryAnalyzer from '$/history/analyzer';
-import { helpMessageOption, buttons } from '@/utils';
-import { toTimeString } from '$/utils';
-import { compileExcludedTagPatterns, getExcludedTagIDs, isTagExcluded } from '$/tagFilter';
+import Highcharts from '@/highcharts';
+import { buttons, helpMessageOption } from '@/utils';
 import type { AttachmentHistory } from '$/history/history';
+import { createReadingKernelSnapshot } from '$/history/kernel';
+import { compileExcludedTagPatterns, getExcludedTagIDs, isTagExcluded } from '$/tagFilter';
+import { toTimeString } from '$/utils';
 
 const Zotero = addon.getGlobal('Zotero');
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
@@ -43,8 +43,7 @@ export default {
                 for (const str of text)
                     for (const { segment, isWordLike } of Array.from(segmenter.segment(str))) {
                         const word = segment.toLocaleLowerCase();
-                        if (isWordLike && !stopWordSet.has(word))
-                            setWord(word);
+                        if (isWordLike && !stopWordSet.has(word)) setWord(word);
                     }
             }
 
@@ -52,25 +51,24 @@ export default {
                 case 'tag':
                     for (let i = 0; i < this.items.length; ++i) {
                         const item = this.items[i],
-                            analyzer = new HistoryAnalyzer(this.histories[i] ?? []);
+                            totalS = createReadingKernelSnapshot(this.histories[i] ?? []).totalS;
                         if (!item) continue;
                         item.getTags().forEach(tag => {
                             const tagName = tag.tag,
                                 id = Zotero.Tags.getID(tagName);
                             if (
-                                tag.type
-                                && id
-                                && !isTagExcluded(tagName, id, this.filteredTags, this.excludedTagRegexes)
+                                tag.type &&
+                                id &&
+                                !isTagExcluded(tagName, id, this.filteredTags, this.excludedTagRegexes)
                             )
-                                data.set(tagName, (data.get(tagName) ?? 0) + analyzer.totalS);
+                                data.set(tagName, (data.get(tagName) ?? 0) + totalS);
                         });
                     }
                     break;
 
                 case 'author':
                     for (const item of this.items)
-                        for (const c of item.getCreators()) 
-                            setWord(c.firstName + ' ' + c.lastName);
+                        for (const c of item.getCreators()) setWord(c.firstName + ' ' + c.lastName);
                     break;
 
                 case 'title':

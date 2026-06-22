@@ -1,11 +1,4 @@
 <script lang="ts">
-import { Chart } from 'highcharts-vue';
-import Skyline from './components/skyline.vue';
-import HistoryAnalyzer from '$/history/analyzer';
-import { toTimeString, accumulate } from '$/utils';
-import { compileExcludedTagPatterns, getExcludedTagIDs, isTagExcluded } from '$/tagFilter';
-import { splitOtherData } from '@/utils';
-import Highcharts from '@/highcharts';
 import type {
     Options,
     PointOptionsObject,
@@ -15,12 +8,31 @@ import type {
     SeriesSplineOptions,
     SeriesVariablepieOptions,
 } from 'highcharts';
+import { Chart } from 'highcharts-vue';
+import Highcharts from '@/highcharts';
+import { splitOtherData } from '@/utils';
+import {
+    buildDailyTrendStatsFromEvents,
+    buildReadingStreakStatsFromEvents,
+    buildScheduleStatsFromEvents,
+    buildTimeBucketStats,
+    type DailyTrendStats,
+    getActiveReadingDays,
+    getDayNumber,
+    getReadSecondsByDate,
+    type ReadingStreakStats,
+} from '$/history/analytics';
 import type { AttachmentHistory } from '$/history/history';
+import { createReadingKernelSnapshot, createReadingKernelSnapshotForItem } from '$/history/kernel';
+import { getHistoryPeriods, type ReadingSessionStats } from '$/history/session';
+import { compileExcludedTagPatterns, getExcludedTagIDs, isTagExcluded } from '$/tagFilter';
+import { accumulate, toTimeString } from '$/utils';
+import Skyline from './components/skyline.vue';
 
 const excludedTags = getExcludedTagIDs(),
     excludedTagRegexes = compileExcludedTagPatterns(),
     libraryHistory = addon.history.getInLibrary(),
-    analyzer = new HistoryAnalyzer(libraryHistory),
+    kernel = createReadingKernelSnapshot(libraryHistory),
     Zotero = addon.getGlobal('Zotero');
 
 type LiteratureSortMode = 'latest' | 'duration';
@@ -37,28 +49,11 @@ interface LiteratureRecord {
     histories: AttachmentHistory[];
 }
 
-interface ReadingStreakStats {
-    recent: number;
-    longest: number;
-}
-
-interface DailyTrendStats {
-    categories: string[];
-    data: number[];
-}
-
 interface TimePreferenceStat {
     key: string;
     label: string;
     totalS: number;
     percent: number;
-}
-
-interface ReadingSessionStats {
-    count: number;
-    averageS: number;
-    longestS: number;
-    latestS: number;
 }
 
 interface TagInvestmentStat {
@@ -68,18 +63,8 @@ interface TagInvestmentStat {
     percent: number;
 }
 
-interface ReadingPeriod {
-    time: number;
-    duration: number;
-}
-
 function drawSchedule() {
-    const weekData = new Array(7).fill(0),
-        hourData = new Array(24).fill(0);
-    analyzer.forEachPeriod((date, time) => {
-        weekData[date.getDay()] += time;
-        hourData[date.getHours()] += time;
-    });
+    const { weekData, hourData } = buildScheduleStatsFromEvents(kernel.events);
     return [
         {
             name: addon.locale.scheduleWeek ?? 'week',
@@ -98,7 +83,7 @@ function drawSchedule() {
 
 async function drawVariablePie() {
     function getTime(item: Zotero.Item) {
-        return new HistoryAnalyzer(item).totalS;
+        return createReadingKernelSnapshotForItem(item).totalS;
     }
     function process(arr: Array<PointOptionsObject>, item: Zotero.Item) {
         const tags = item
@@ -191,51 +176,9 @@ function buildLiteratureRecords(histories: AttachmentHistory[]): LiteratureRecor
         record.histories.push(history);
         records.set(key, record);
     }
-    for (const record of records.values()) record.progress = new HistoryAnalyzer(record.histories).progress;
+    for (const record of records.values())
+        record.progress = createReadingKernelSnapshot(record.histories).progressPercent;
     return Array.from(records.values()).filter(record => record.totalS > 0);
-}
-
-function getDayNumber(date: Date) {
-    return Math.floor(new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() / 86400000);
-}
-
-function buildReadingStreakStats(stats: Array<{ date: number; time: number }>): ReadingStreakStats {
-    const days = Array.from(
-        new Set(stats.filter(stat => stat.time > 0).map(stat => getDayNumber(new Date(stat.date)))),
-    ).sort((a, b) => a - b);
-    if (!days.length) return { recent: 0, longest: 0 };
-
-    let current = 1,
-        longest = 1;
-    for (let i = 1; i < days.length; i++) {
-        current = days[i] - days[i - 1] == 1 ? current + 1 : 1;
-        longest = Math.max(longest, current);
-    }
-
-    const today = getDayNumber(new Date()),
-        latest = days.at(-1)!,
-        recent = today - latest > 1 ? 0 : current;
-    return { recent, longest };
-}
-
-function buildDailyTrendStats(range: TrendRange): DailyTrendStats {
-    const locale = Zotero.locale || navigator.language,
-        map = analyzer.dateTimeMap,
-        categories: string[] = [],
-        data: number[] = [],
-        today = new Date();
-    for (let offset = range - 1; offset >= 0; offset--) {
-        const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset),
-            key = date.toLocaleDateString();
-        categories.push(
-            new Intl.DateTimeFormat(locale, {
-                month: 'numeric',
-                day: 'numeric',
-            }).format(date),
-        );
-        data.push(map[key]?.time ?? 0);
-    }
-    return { categories, data };
 }
 
 function buildTimePreferenceStats(labels: {
@@ -244,62 +187,12 @@ function buildTimePreferenceStats(labels: {
     afternoon: string;
     evening: string;
 }) {
-    const buckets = [
-            { key: 'night', label: labels.night, start: 0, end: 6, totalS: 0 },
-            { key: 'morning', label: labels.morning, start: 6, end: 12, totalS: 0 },
-            { key: 'afternoon', label: labels.afternoon, start: 12, end: 18, totalS: 0 },
-            { key: 'evening', label: labels.evening, start: 18, end: 24, totalS: 0 },
-        ],
-        total = analyzer.totalS;
-    analyzer.forEachPeriod((date, time) => {
-        const hour = date.getHours(),
-            bucket = buckets.find(item => hour >= item.start && hour < item.end);
-        if (bucket) bucket.totalS += time;
-    });
-    return buckets.map(({ key, label, totalS }) => ({
-        key,
-        label,
-        totalS,
-        percent: total > 0 ? Math.round((totalS / total) * 100) : 0,
-    })) as TimePreferenceStat[];
-}
-
-function getHistoryPeriods(histories: AttachmentHistory[]): ReadingPeriod[] {
-    return histories.flatMap(history =>
-        history.record.pageArr.flatMap(page =>
-            Object.entries(page.period ?? {}).map(([time, duration]) => ({
-                time: Number(time),
-                duration,
-            })),
-        ),
-    );
-}
-
-function buildReadingSessionStats(histories: AttachmentHistory[]): ReadingSessionStats {
-    const maxGap = 30 * 60,
-        periods = getHistoryPeriods(histories).sort((a, b) => a.time - b.time);
-    if (!periods.length) return { count: 0, averageS: 0, longestS: 0, latestS: 0 };
-
-    const sessions: Array<{ start: number; end: number; totalS: number }> = [];
-    for (const period of periods) {
-        const last = sessions.at(-1),
-            periodEnd = period.time + period.duration;
-        if (!last || period.time - last.end > maxGap) {
-            sessions.push({ start: period.time, end: periodEnd, totalS: period.duration });
-        } else {
-            last.end = Math.max(last.end, periodEnd);
-            last.totalS += period.duration;
-        }
-    }
-    const totalS = sessions.reduce((sum, session) => sum + session.totalS, 0),
-        longestS = Math.max(...sessions.map(session => session.totalS)),
-        latestS = sessions.at(-1)?.totalS ?? 0;
-    return {
-        count: sessions.length,
-        averageS: Math.round(totalS / sessions.length),
-        longestS,
-        latestS,
-    };
+    return buildTimeBucketStats(kernel.events, [
+        { key: 'night', label: labels.night, start: 0, end: 6 },
+        { key: 'morning', label: labels.morning, start: 6, end: 12 },
+        { key: 'afternoon', label: labels.afternoon, start: 12, end: 18 },
+        { key: 'evening', label: labels.evening, start: 18, end: 24 },
+    ]) as TimePreferenceStat[];
 }
 
 function buildTagInvestmentStats(records: LiteratureRecord[]): TagInvestmentStat[] {
@@ -334,11 +227,11 @@ export default {
     data() {
         return {
             locale: addon.locale,
-            overallProgress: analyzer.progress,
-            totalTime: analyzer.totalS,
-            todayTime: analyzer.getByDate(new Date()),
-            activeDays: analyzer.dateTimeStats.length,
-            streakStats: buildReadingStreakStats(analyzer.dateTimeStats),
+            overallProgress: kernel.progressPercent,
+            totalTime: kernel.totalS,
+            todayTime: getReadSecondsByDate(kernel.events, new Date()),
+            activeDays: getActiveReadingDays(kernel.events),
+            streakStats: buildReadingStreakStatsFromEvents(kernel.events),
             attachmentCount: libraryHistory.length,
             trendRange: 30 as TrendRange,
             literatureSortMode: 'latest' as LiteratureSortMode,
@@ -508,7 +401,11 @@ export default {
             };
         },
         dailyTrendStats(): DailyTrendStats {
-            return buildDailyTrendStats(this.trendRange);
+            return buildDailyTrendStatsFromEvents(
+                kernel.events,
+                this.trendRange,
+                Zotero.locale || navigator.language,
+            );
         },
         trendOptions(): Options {
             return {
@@ -564,7 +461,7 @@ export default {
             return [...this.timePreferenceStats].sort((a, b) => b.totalS - a.totalS)[0];
         },
         sessionStats(): ReadingSessionStats {
-            return buildReadingSessionStats(libraryHistory);
+            return kernel.sessionStats;
         },
         totalTimeLabel(): string {
             return toTimeString(this.totalTime);
@@ -621,15 +518,14 @@ export default {
         selectedHistoryRows(): Array<{ title: string; totalS: number; lastTime: number; progress: number }> {
             return (
                 this.selectedLiteratureRecord?.histories.map(history => {
-                    const attachment = Zotero.Items.getByLibraryAndKey(
-                        history.note.libraryID,
-                        history.key,
-                    ) as false | Zotero.Item;
+                    const attachment = Zotero.Items.getByLibraryAndKey(history.note.libraryID, history.key) as
+                        | false
+                        | Zotero.Item;
                     return {
                         title: attachment ? (attachment.getField('title') as string) : history.key,
                         totalS: history.record.totalS,
                         lastTime: history.record.lastTime ?? 0,
-                        progress: new HistoryAnalyzer(history).progress,
+                        progress: createReadingKernelSnapshot([history]).progressPercent,
                     };
                 }) ?? []
             );

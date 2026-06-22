@@ -1,20 +1,27 @@
 <script lang="ts">
 import type {
-    Options,
-    SeriesGanttOptions,
     GanttPointOptionsObject,
-    YAxisOptions,
     NavigatorYAxisOptions,
+    Options,
     Point,
+    SeriesGanttOptions,
     XAxisOptions,
+    YAxisOptions,
 } from 'highcharts';
-import { FilterIcon, SwapIcon } from 'tdesign-icons-vue-next';
 import { Chart } from 'highcharts-vue';
+import { FilterIcon, SwapIcon } from 'tdesign-icons-vue-next';
 import { defineComponent } from 'vue';
-import { helpMessageOption } from '@/utils';
 import Highcharts from '@/highcharts';
-import HistoryAnalyzer from '$/history/analyzer';
+import { helpMessageOption } from '@/utils';
 import type { AttachmentHistory } from '$/history/history';
+import {
+    createReadingKernelSnapshot,
+    createReadingKernelSnapshotForItem,
+    getHistoryItem,
+    getHistoryItemID,
+    getHistoryTitle,
+    getReadingKernelBounds,
+} from '$/history/kernel';
 import { toTimeString } from '$/utils';
 
 interface GanttItem extends GanttPointOptionsObject {
@@ -50,6 +57,7 @@ function sortData(opt: string, data: GanttItem[]): GanttItem[] {
         }
     });
 }
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function filterData(opts: string[], data: GanttItem[]): GanttItem[] {
     const now = new Date(); // 时间选项不会同时出现，所以放在循环外
@@ -120,14 +128,15 @@ function addParentData(data: GanttItem[]): GanttItem[] {
     // 添加父条目
     for (const id of parentIds) {
         const it = Zotero.Items.get(id),
-            ha = new HistoryAnalyzer(it);
+            snapshot = createReadingKernelSnapshotForItem(it),
+            bounds = getReadingKernelBounds(snapshot);
         data.push({
             id: String(id),
             name: it.getField('title'),
-            start: ha.firstTime * 1000,
-            end: ha.lastTime * 1000,
-            completed: ha.progress / 100,
-            custom: { totalS: ha.totalS, author: it.firstCreator },
+            start: bounds.firstTime * 1000,
+            end: bounds.lastTime * 1000,
+            completed: snapshot.progressPercent / 100,
+            custom: { totalS: snapshot.totalS, author: it.firstCreator },
         });
     }
     // 替换顶层条目名为父条目标题
@@ -159,14 +168,15 @@ function addParentDataFast(data: GanttItem[]): GanttItem[] {
         });
     for (const id of parentIds) {
         const it = Zotero.Items.get(id),
-            ha = new HistoryAnalyzer(it);
+            snapshot = createReadingKernelSnapshotForItem(it),
+            bounds = getReadingKernelBounds(snapshot);
         data.push({
             id: String(id),
             name: it.getField('title'),
-            start: ha.firstTime * 1000,
-            end: ha.lastTime * 1000,
-            completed: ha.progress / 100,
-            custom: { totalS: ha.totalS, author: it.firstCreator },
+            start: bounds.firstTime * 1000,
+            end: bounds.lastTime * 1000,
+            completed: snapshot.progressPercent / 100,
+            custom: { totalS: snapshot.totalS, author: it.firstCreator },
         });
     }
     for (const d of data)
@@ -391,16 +401,17 @@ export default defineComponent({
         updateChart(his: AttachmentHistory[]) {
             rawData = his
                 .map(attHis => {
-                    const ha = new HistoryAnalyzer(attHis);
+                    const snapshot = createReadingKernelSnapshot([attHis]),
+                        item = getHistoryItem(attHis);
                     return {
-                        name: ha.titles[0],
+                        name: getHistoryTitle(attHis),
                         start: (attHis.record.firstTime ?? 0) * 1000,
                         end: (attHis.record.lastTime ?? 0) * 1000,
-                        completed: ha.progress / 100,
-                        id: ha.ids[0],
+                        completed: snapshot.progressPercent / 100,
+                        id: getHistoryItemID(attHis),
                         custom: {
                             totalS: attHis.record.totalS,
-                            author: ha.parents[0]?.firstCreator,
+                            author: item?.parentItem?.firstCreator,
                         },
                     } as GanttItem;
                 })

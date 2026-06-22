@@ -19,19 +19,19 @@
 </template>
 
 <script lang="ts">
-import { Chart } from 'highcharts-vue';
 import type {
-    Tooltip,
+    ExportingOptions,
     Point,
     PointClickEventObject,
-    ExportingOptions,
     SeriesColumnOptions,
+    Tooltip,
 } from 'highcharts';
+import { Chart } from 'highcharts-vue';
 import { defineComponent } from 'vue';
-import { buttons, helpMessageOption } from '@/utils';
 import Highcharts from '@/highcharts';
-import HistoryAnalyzer from '$/history/analyzer';
+import { buttons, helpMessageOption } from '@/utils';
 import type { AttachmentHistory } from '$/history/history';
+import { getHistoryItemID, getHistoryTitle } from '$/history/kernel';
 import { toTimeString } from '$/utils';
 
 function onPointClick(this: Point, events: PointClickEventObject) {
@@ -47,11 +47,7 @@ function tooltipFormatter(this: Point, tooltip: Tooltip) {
         tooltip.chart.series.length > 1
             ? `<span style="color: ${this.series.color}">\u25CF</span> ${this.series.name}:<br>`
             : '';
-    return (
-        result +
-        `${addon.locale.pageNum}: ${this.x}<br>${addon.locale.time}: ` +
-        toTimeString(this.y!)
-    );
+    return result + `${addon.locale.pageNum}: ${this.x}<br>${addon.locale.time}: ` + toTimeString(this.y!);
 }
 
 function pageHeatColor(value: number, max: number) {
@@ -75,9 +71,7 @@ export default defineComponent({
             chartOpts: {
                 exporting: {
                     buttons,
-                    menuItemDefinitions: helpMessageOption(
-                        addon.locale.doc.pageTime
-                    ),
+                    menuItemDefinitions: helpMessageOption(addon.locale.doc.pageTime),
                 } as ExportingOptions,
                 plotOptions: {
                     series: {
@@ -109,8 +103,8 @@ export default defineComponent({
                     title: { text: undefined },
                     labels: { formatter: ctx => toTimeString(ctx.value) },
                 },
-                subtitle: { 
-                    text: (Zotero.isMac ? 'Meta' : 'Ctrl') + addon.locale.chartTitle.pageTimeSub
+                subtitle: {
+                    text: (Zotero.isMac ? 'Meta' : 'Ctrl') + addon.locale.chartTitle.pageTimeSub,
                 },
                 tooltip: { formatter: tooltipFormatter },
                 series: [{ type: 'column' }],
@@ -134,51 +128,50 @@ export default defineComponent({
         history: {
             immediate: true,
             handler(his: AttachmentHistory[]) {
-            if (his.length < 1) return;
-            (this.$refs.chart as typeof Chart | undefined)?.chart?.hideData();
-            const totals = his.flatMap(attHis =>
-                    Object.entries(attHis.record.pages).map(([page, record]) => ({
-                        page: Number(page) + 1,
-                        time: record.totalS ?? 0,
-                    }))
-                ),
-                active = totals.filter(item => item.time > 0),
-                max = active.reduce((result, item) => Math.max(result, item.time), 0),
-                hottest = active.reduce(
-                    (result, item) => item.time > result.time ? item : result,
-                    { page: 0, time: 0 },
-                );
-            this.stats = {
-                total: active.reduce((sum, item) => sum + item.time, 0),
-                activePages: active.length,
-                maxPage: hottest.page,
-            };
-            this.chartOpts.series = his.map(attHis => {
-                const ha = new HistoryAnalyzer([attHis]),
-                    firstPage = attHis.record.firstPage ?? 0,
-                    lastPage = attHis.record.lastPage ?? firstPage,
-                    data: Array<{ x: number; y: number; color: string }> = [];
-                for (let i = firstPage; i <= lastPage; ++i) {
-                    const time = attHis.record.pages[i]?.totalS ?? 0;
-                    data.push({
-                        x: i + 1,
-                        y: time,
-                        color: pageHeatColor(time, max),
+                if (his.length < 1) return;
+                (this.$refs.chart as typeof Chart | undefined)?.chart?.hideData();
+                const totals = his.flatMap(attHis =>
+                        Object.entries(attHis.record.pages).map(([page, record]) => ({
+                            page: Number(page) + 1,
+                            time: record.totalS ?? 0,
+                        })),
+                    ),
+                    active = totals.filter(item => item.time > 0),
+                    max = active.reduce((result, item) => Math.max(result, item.time), 0),
+                    hottest = active.reduce((result, item) => (item.time > result.time ? item : result), {
+                        page: 0,
+                        time: 0,
                     });
-                }
-                // addon.log(attHis.record.pages, data);
-                return {
-                    type: 'column',
-                    name:
-                        his.length > 1
-                            ? ha.titles[0]
-                            : `${addon.locale.time}(${addon.locale.seconds})`,
-                    data,
-                    id: ha.ids[0],
-                } as SeriesColumnOptions;
-            });
-            this.chartOpts.legend!.enabled = his.length > 1;
-        },
+                this.stats = {
+                    total: active.reduce((sum, item) => sum + item.time, 0),
+                    activePages: active.length,
+                    maxPage: hottest.page,
+                };
+                this.chartOpts.series = his.map(attHis => {
+                    const firstPage = attHis.record.firstPage ?? 0,
+                        lastPage = attHis.record.lastPage ?? firstPage,
+                        data: Array<{ x: number; y: number; color: string }> = [];
+                    for (let i = firstPage; i <= lastPage; ++i) {
+                        const time = attHis.record.pages[i]?.totalS ?? 0;
+                        data.push({
+                            x: i + 1,
+                            y: time,
+                            color: pageHeatColor(time, max),
+                        });
+                    }
+                    // addon.log(attHis.record.pages, data);
+                    return {
+                        type: 'column',
+                        name:
+                            his.length > 1
+                                ? getHistoryTitle(attHis)
+                                : `${addon.locale.time}(${addon.locale.seconds})`,
+                        data,
+                        id: String(getHistoryItemID(attHis) ?? ''),
+                    } as SeriesColumnOptions;
+                });
+                this.chartOpts.legend!.enabled = his.length > 1;
+            },
         },
     },
     components: { Chart },

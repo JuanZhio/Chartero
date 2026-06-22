@@ -1,12 +1,8 @@
 <script lang="ts">
-import type {
-    Options,
-    PointOptionsObject,
-    SeriesScatterOptions,
-} from 'highcharts';
+import type { Options, PointOptionsObject, SeriesScatterOptions } from 'highcharts';
 import Highcharts from '@/highcharts';
-import HistoryAnalyzer from '$/history/analyzer';
 import type { AttachmentHistory } from '$/history/history';
+import { getHistoryTitle } from '$/history/kernel';
 export default {
     data() {
         return { locale: addon.locale };
@@ -26,23 +22,20 @@ export default {
                         type: 'scatter',
                         cluster: { enabled: true },
                         allowPointSelect: false,
-                        name: new HistoryAnalyzer([his]).titles[0],
+                        name: getHistoryTitle(his),
                         colorKey: 'z',
-                        data: Object.keys(his.record.pages).reduce(
-                            (arr, idx) => {
-                                const page = his.record.pages[Number(idx)],
-                                    periods = page.period;
-                                if (periods)
-                                    for (const t in periods)
-                                        arr.push({
-                                            x: parseInt(t) * 1000,
-                                            y: parseInt(idx),
-                                            z: periods[t],
-                                        });
-                                return arr;
-                            },
-                            [] as PointOptionsObject[]
-                        ),
+                        data: Object.keys(his.record.pages).reduce((arr, idx) => {
+                            const page = his.record.pages[Number(idx)],
+                                periods = page.period;
+                            if (periods)
+                                for (const t in periods)
+                                    arr.push({
+                                        x: parseInt(t) * 1000,
+                                        y: parseInt(idx),
+                                        z: periods[t],
+                                    });
+                            return arr;
+                        }, [] as PointOptionsObject[]),
                     } as SeriesScatterOptions;
                 }),
             } as Options;

@@ -15,12 +15,28 @@
 <body>
   <div id="app"></div>
   <script type="module">
-    import { createApp } from 'vue';
-    import App from './main.vue';
     import 'tdesign-vue-next/es/style/index.css';
     import 'highcharts/css/highcharts.css';
     import '@highcharts/dashboards/css/dashboards.css';
-    createApp(App).mount('#app');
+
+    async function waitForAddon() {
+      for (let i = 0; i < 100; i++) {
+        if (globalThis.addon) return globalThis.addon;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      throw new Error('Chartero addon is not available in overview iframe');
+    }
+
+    async function mountCharteroOverview() {
+      const charteroAddon = await waitForAddon();
+      await charteroAddon.history?.waitUntilLoaded?.();
+      const [{ createApp }, { default: App }] = await Promise.all([
+        import('vue'),
+        import('./main.vue'),
+      ]);
+      createApp(App).mount('#app');
+    }
+    mountCharteroOverview();
 
     function switchTheme(e) {
       document.documentElement.setAttribute('theme-mode', e.matches ? 'dark' : 'light');

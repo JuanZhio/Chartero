@@ -1,9 +1,9 @@
 <script lang="ts">
 import { Chart } from 'highcharts-vue';
 import Highcharts from '@/highcharts';
-import HistoryAnalyzer from '$/history/analyzer';
 import { helpMessageOption } from '@/utils';
 import type { AttachmentHistory } from '$/history/history';
+import { getHistoryItem } from '$/history/kernel';
 
 export default {
     components: { Chart },
@@ -22,8 +22,13 @@ export default {
     },
     computed: {
         chartOpts(): Highcharts.Options {
-            const ha = new HistoryAnalyzer(this.history),
-                parents = ha.parents.filter(it => it?.isRegularItem()) as Zotero.Item[];
+            const parents = Array.from(
+                new Set(
+                    this.history
+                        .map(history => getHistoryItem(history)?.parentItem)
+                        .filter((item): item is Zotero.Item => !!item?.isRegularItem()),
+                ),
+            );
 
             return {
                 exporting: {

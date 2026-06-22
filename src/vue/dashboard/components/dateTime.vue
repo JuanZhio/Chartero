@@ -19,23 +19,19 @@
 </template>
 
 <script lang="ts">
+import type { ExportingOptions, Options, SeriesColumnOptions, Tooltip } from 'highcharts';
 import { Chart } from 'highcharts-vue';
 import { defineComponent } from 'vue';
-import { buttons, helpMessageOption } from '@/utils';
 import Highcharts from '@/highcharts';
-import HistoryAnalyzer from '$/history/analyzer';
-import type {
-    ExportingOptions,
-    Options,
-    SeriesColumnOptions,
-    Tooltip,
-} from 'highcharts';
+import { buttons, helpMessageOption } from '@/utils';
+import { buildDateTimeStatsFromEvents } from '$/history/analytics';
 import type { AttachmentHistory } from '$/history/history';
+import { createReadingKernelSnapshot } from '$/history/kernel';
 import { toTimeString } from '$/utils';
 
 function tooltipFormatter(
     this: { x?: number; y?: number; series: { color?: string; name: string } },
-    tooltip: Tooltip
+    tooltip: Tooltip,
 ) {
     const result =
         tooltip.chart.series.length > 1
@@ -45,7 +41,7 @@ function tooltipFormatter(
         result +
         `${addon.locale.date}: ${Highcharts.dateFormat(
             '%Y-%m-%d',
-            this.x as number
+            this.x as number,
         )}<br>${addon.locale.time}: ${toTimeString(this.y as number)}`
     );
 }
@@ -64,9 +60,7 @@ export default defineComponent({
             chartOpts: {
                 exporting: {
                     buttons,
-                    menuItemDefinitions: helpMessageOption(
-                        addon.locale.doc.dateTime
-                    ),
+                    menuItemDefinitions: helpMessageOption(addon.locale.doc.dateTime),
                 } as ExportingOptions,
                 chart: {
                     backgroundColor: 'transparent',
@@ -114,29 +108,30 @@ export default defineComponent({
         history: {
             immediate: true,
             handler(newHis: AttachmentHistory[]) {
-            if (!newHis) return;
-            (this.$refs.chart as typeof Chart | undefined)?.chart?.hideData();
-            const allStats = newHis.flatMap(attHis => new HistoryAnalyzer([attHis]).dateTimeStats),
-                total = allStats.reduce((sum, stat) => sum + stat.time, 0);
-            this.stats = {
-                total,
-                days: allStats.length,
-                average: allStats.length ? Math.round(total / allStats.length) : 0,
-            };
+                if (!newHis) return;
+                (this.$refs.chart as typeof Chart | undefined)?.chart?.hideData();
+                const allStats = buildDateTimeStatsFromEvents(createReadingKernelSnapshot(newHis).events),
+                    total = allStats.reduce((sum, stat) => sum + stat.time, 0);
+                this.stats = {
+                    total,
+                    days: allStats.length,
+                    average: allStats.length ? Math.round(total / allStats.length) : 0,
+                };
 
-            this.chartOpts.series = newHis.map(attHis => {
-                const ha = new HistoryAnalyzer([attHis]);
-                return {
-                    type: 'column',
-                    name:
-                        newHis.length > 1
-                            ? ha.titles[0]
-                            : `${addon.locale.time}(${addon.locale.seconds})`,
-                    data: ha.dateTimeStats.map(obj => [obj.date, obj.time]),
-                } as SeriesColumnOptions;
-            });
-            this.chartOpts.legend!.enabled = newHis.length > 1;
-        },
+                this.chartOpts.series = newHis.map(attHis => {
+                    const kernel = createReadingKernelSnapshot([attHis]),
+                        stats = buildDateTimeStatsFromEvents(kernel.events),
+                        title = kernel.resources[0]?.itemID
+                            ? (Zotero.Items.get(kernel.resources[0].itemID)?.getField('title') as string)
+                            : undefined;
+                    return {
+                        type: 'column',
+                        name: newHis.length > 1 ? title : `${addon.locale.time}(${addon.locale.seconds})`,
+                        data: stats.map(obj => [obj.date, obj.time]),
+                    } as SeriesColumnOptions;
+                });
+                this.chartOpts.legend!.enabled = newHis.length > 1;
+            },
         },
     },
     props: {

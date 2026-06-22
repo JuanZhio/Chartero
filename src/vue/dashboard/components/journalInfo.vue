@@ -1,5 +1,5 @@
 <template>
-  <aside class="journal-panel">
+  <aside :class="['journal-panel', { embedded }]">
     <div class="journal-header">
       <div>
         <div class="journal-title">期刊信息</div>
@@ -128,6 +128,7 @@ interface DisplayItem {
 export default {
     props: {
         item: Object,
+        embedded: Boolean,
     },
     data() {
         return {
@@ -158,12 +159,15 @@ export default {
             ].filter(Boolean) as DisplayItem[];
         },
         casPartition(): DisplayItem | undefined {
-            return this.officialItems.find(item => /中科院|SCI|XR|新锐/.test(item.label) && /区|TOP/.test(item.value));
+            return this.officialItems.find(
+                item => /中科院|SCI|XR|新锐/.test(item.label) && /区|TOP/.test(item.value),
+            );
         },
         smallField(): string {
             return (
-                this.details?.officialRanks.find(rank => /小类/.test(rank.label))?.label.replace(/^\S+\s*/, '') ??
-                ''
+                this.details?.officialRanks
+                    .find(rank => /小类/.test(rank.label))
+                    ?.label.replace(/^\S+\s*/, '') ?? ''
             );
         },
     },
@@ -188,7 +192,11 @@ export default {
             try {
                 this.details = await getJournalRankDetails(this.item as Zotero.Item);
                 if (!this.details) this.message = '当前条目没有可查询的期刊名称。';
-                else if (!this.details.officialRanks.length && !this.details.customRanks.length && !this.details.metrics.length)
+                else if (
+                    !this.details.officialRanks.length &&
+                    !this.details.customRanks.length &&
+                    !this.details.metrics.length
+                )
                     this.message = '未查询到期刊等级。';
             } catch (error) {
                 addon.log(error);
@@ -241,6 +249,13 @@ export default {
     min-height: 100%;
     overflow-y: auto;
     padding: 12px;
+}
+
+.journal-panel.embedded {
+    background: transparent;
+    min-height: auto;
+    overflow: visible;
+    padding: 0;
 }
 
 .journal-header {

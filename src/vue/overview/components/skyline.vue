@@ -37,10 +37,11 @@
 </template>
 
 <script lang="ts">
-import HistoryAnalyzer from '$/history/analyzer';
-import { toTimeString } from '$/utils';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { nextTick } from 'vue';
+import { getReadSecondsByDate } from '$/history/analytics';
+import { createReadingKernelSnapshot } from '$/history/kernel';
+import { toTimeString } from '$/utils';
 
 export default {
     data() {
@@ -93,10 +94,9 @@ export default {
             const lightColors = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'],
                 darkColors = ['#161b22', '#0e4429', '#006d32', '#26a641', '#39d353'],
                 colors = isDark ? darkColors : lightColors,
-                history = new HistoryAnalyzer(addon.history.getInLibrary()),
-                stats = history.dateTimeMap,
-                readingS = forEachBlock(
-                    (week: number, day: number) => stats[getDate(week, day).toLocaleDateString()]?.time ?? 0,
+                kernel = createReadingKernelSnapshot(addon.history.getInLibrary()),
+                readingS = forEachBlock((week: number, day: number) =>
+                    getReadSecondsByDate(kernel.events, getDate(week, day)),
                 ),
                 orderlyReadingS = readingS.filter(e => e > 0).sort((l, r) => l - r);
             this.legendColors = colors.slice(1);

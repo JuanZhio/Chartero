@@ -1,7 +1,13 @@
 <script lang="ts">
-import HistoryAnalyzer from '$/history/analyzer';
-import { toTimeString } from '$/utils';
+import { buildDateTimeStatsFromEvents } from '$/history/analytics';
+import {
+    createReadingKernelSnapshot,
+    createReadingKernelSnapshotForItem,
+    getHistoryItem,
+    getReadingKernelBounds,
+} from '$/history/kernel';
 import { compileExcludedTagPatterns, getExcludedTagIDs, isTagExcluded } from '$/tagFilter';
+import { toTimeString } from '$/utils';
 import User from './components/user.vue';
 
 export default {
@@ -10,7 +16,7 @@ export default {
         return {
             TS: toTimeString,
             allItems: Zotero.Items.getAll(1),
-            history: new HistoryAnalyzer(addon.history.getInLibrary()),
+            history: createReadingKernelSnapshot(addon.history.getInLibrary()),
             readDates: new Array<Date>(),
             excludedTags: getExcludedTagIDs(),
             excludedTagRegexes: compileExcludedTagPatterns(),
@@ -30,7 +36,7 @@ export default {
                 begin: 'loading...',
                 end: 'loading...',
                 count: 'loading...',
-            }
+            },
         };
     },
     computed: {
@@ -38,20 +44,23 @@ export default {
             return Zotero.Users.getCurrentName();
         },
         firstDate() {
-            return new Date(this.history.firstTime * 1000).toLocaleDateString(Zotero.locale, {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            });
+            return new Date(getReadingKernelBounds(this.history).firstTime * 1000).toLocaleDateString(
+                Zotero.locale,
+                {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                },
+            );
         },
         itemCount() {
-            return this.history.validAttachments.length.toString();
+            return this.history.resources.length.toString();
         },
         totalTime() {
             return toTimeString(this.history.totalS);
         },
         overallProgress() {
-            return this.history.progress.toString();
+            return this.history.progressPercent.toString();
         },
         keywordName() {
             return Zotero.Tags.getName(this.keyword.id) || 'undefined';
@@ -66,14 +75,13 @@ export default {
             return (this.favoriteItem?.getField('title') || 'undefined') as string;
         },
         hardMonth() {
-            let hardMonth = 0, maxDays = 0;
+            let hardMonth = 0,
+                maxDays = 0;
             for (let month = 0; month < 12; ++month) {
                 let count = 0;
 
                 // 遍历stats中的每个键
-                for (const date of this.readDates)
-                    if (date.getMonth() === month)
-                        ++count;
+                for (const date of this.readDates) if (date.getMonth() === month) ++count;
                 if (count > maxDays) {
                     hardMonth = month;
                     maxDays = count;
@@ -93,29 +101,35 @@ export default {
     },
     methods: {
         getKeywords() {
-            for (const it of this.history.parents)
+            const parents = Array.from(
+                new Set(
+                    this.history.histories
+                        .map(history => getHistoryItem(history)?.parentItem)
+                        .filter((item): item is Zotero.Item => !!item?.isRegularItem()),
+                ),
+            );
+            for (const it of parents)
                 if (it?.isRegularItem())
                     for (const tag of it.getTags())
                         if (tag.type) {
                             const tagID = Zotero.Tags.getID(tag.tag);
-                            if (tagID && !isTagExcluded(
-                                tag.tag,
-                                tagID,
-                                this.excludedTags,
-                                this.excludedTagRegexes,
-                            )) {
+                            if (
+                                tagID &&
+                                !isTagExcluded(tag.tag, tagID, this.excludedTags, this.excludedTagRegexes)
+                            ) {
                                 this.keywords[tagID] ??= [];
                                 this.keywords[tagID].push(it.id);
                             }
                         }
-            let id = 0, time = 0;
+            let id = 0,
+                time = 0;
             for (const tagID in this.keywords)
                 for (const itemID of this.keywords[tagID]) {
                     const item = Zotero.Items.get(itemID),
-                        his = new HistoryAnalyzer(addon.history.getInTopLevelSync(item)),
+                        his = createReadingKernelSnapshot(addon.history.getInTopLevelSync(item)),
                         seconds = his.totalS;
                     if (seconds > time) {
-                        id = itemID;
+                        id = Number(tagID);
                         time = seconds;
                     }
                 }
@@ -124,11 +138,11 @@ export default {
         },
         getFavoriteItem() {
             let time = 0;
-            for (const att of this.history.validAttachments) {
-                const his = new HistoryAnalyzer(att),
-                    seconds = his.totalS;
+            for (const history of this.history.histories) {
+                const att = getHistoryItem(history),
+                    seconds = history.record.totalS;
                 if (seconds > time) {
-                    this.favoriteItem = att;
+                    this.favoriteItem = att ?? null;
                     time = seconds;
                 }
             }
@@ -143,17 +157,19 @@ export default {
                 }
             }
         },
-        async getFavoriteAJ() {  // Author and Journal
+        async getFavoriteAJ() {
+            // Author and Journal
             const topLevels = Zotero.Items.keepTopLevel(await this.allItems),
                 journalTime: { [name: string]: number } = {},
                 authorTime: { [id: number]: number } = {};
             for (const item of topLevels) {
-                const journal = item.getField('journalAbbreviation')
-                    || item.getField('publicationTitle')
-                    || item.getField('conferenceName')
-                    || item.getField('proceedingsTitle')
-                    || item.getField('university'),
-                    totalSeconds = new HistoryAnalyzer(item).totalS,
+                const journal =
+                        item.getField('journalAbbreviation') ||
+                        item.getField('publicationTitle') ||
+                        item.getField('conferenceName') ||
+                        item.getField('proceedingsTitle') ||
+                        item.getField('university'),
+                    totalSeconds = createReadingKernelSnapshotForItem(item).totalS,
                     creators: number[] = (item as any)._creatorIDs,
                     updateMap = (map: { [key: number | string]: number }, key: string | number) => {
                         map[key] ??= 0;
@@ -161,14 +177,13 @@ export default {
                     };
                 if (!totalSeconds) continue;
 
-                if (typeof journal == 'string' && journal.length)
-                    updateMap(journalTime, journal);
-                for (const creator of creators)
-                    updateMap(authorTime, creator);
+                if (typeof journal == 'string' && journal.length) updateMap(journalTime, journal);
+                for (const creator of creators) updateMap(authorTime, creator);
             }
 
             function getMax(map: { [key: number | string]: number }): string | number {
-                let max = 0, maxKey = '';
+                let max = 0,
+                    maxKey = '';
                 for (const key in map)
                     if (map[key] > max) {
                         max = map[key];
@@ -187,15 +202,14 @@ export default {
             let cnt = 0;
             this.newItems = topLevels.filter(item => new Date(item.dateAdded) > date);
             for (const item of this.newItems) {
-                const his = new HistoryAnalyzer(item);
-                if (his.ids.length < 1) cnt++;
+                const his = createReadingKernelSnapshotForItem(item);
+                if (his.resources.length < 1) cnt++;
             }
             this.newCount = cnt.toString();
         },
         getCombo() {
-            this.readDates = Object
-                .keys(this.history.dateTimeMap)
-                .map(date => new Date(date))
+            this.readDates = buildDateTimeStatsFromEvents(this.history.events)
+                .map(stat => new Date(stat.date))
                 .sort((a, b) => a.getTime() - b.getTime());
             let currCnt = 0,
                 maxCnt = 0,
@@ -219,14 +233,14 @@ export default {
             this.combo.count = maxCnt.toString();
             this.combo.begin = maxBegin.toLocaleDateString(Zotero.locale, {
                 month: 'long',
-                day: 'numeric'
+                day: 'numeric',
             });
             this.combo.end = maxEnd.toLocaleDateString(Zotero.locale, {
                 month: 'long',
-                day: 'numeric'
+                day: 'numeric',
             });
         },
-    }
+    },
 };
 </script>
 

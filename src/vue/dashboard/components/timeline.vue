@@ -1,6 +1,7 @@
 <script lang="ts">
-import HistoryAnalyzer from '$/history/analyzer';
+import { buildDateTimeStatsFromEvents } from '$/history/analytics';
 import type { AttachmentHistory } from '$/history/history';
+import { createReadingKernelSnapshot, getHistoryItem, getHistoryTitle } from '$/history/kernel';
 import { toTimeString } from '$/utils';
 
 export default {
@@ -23,13 +24,9 @@ export default {
     watch: {
         history(newHis: AttachmentHistory[]) {
             this.items.length = 0;
-            const ha = new HistoryAnalyzer(newHis),
-                attachments = ha.validAttachments;
+            const attachments = newHis.map(getHistoryItem).filter((item): item is Zotero.Item => !!item);
             attachments.forEach(att => {
-                const title =
-                    attachments.length > 1
-                        ? (att.getField('title') as string)
-                        : undefined;
+                const title = attachments.length > 1 ? (att.getField('title') as string) : undefined;
                 this.items.push(
                     {
                         dot: 'default',
@@ -42,25 +39,21 @@ export default {
                         date: new Date(att.dateModified),
                         content: addon.locale.dateModified,
                         title,
-                    }
+                    },
                 );
             });
             newHis.forEach(his => {
-                const ha = new HistoryAnalyzer([his]),
-                    dateTimeStats = ha.dateTimeStats;
+                const dateTimeStats = buildDateTimeStatsFromEvents(createReadingKernelSnapshot([his]).events);
                 dateTimeStats.forEach(({ date, time }) => {
                     this.items.push({
                         dot: 'primary',
                         date: new Date(date),
                         content: toTimeString(time),
-                        title:
-                            attachments.length > 1 ? ha.titles[0] : undefined,
+                        title: attachments.length > 1 ? getHistoryTitle(his) : undefined,
                     });
                 });
             });
-            this.items = this.items.sort(
-                (a, b) => a.date.getTime() - b.date.getTime()
-            );
+            this.items = this.items.sort((a, b) => a.date.getTime() - b.date.getTime());
         },
     },
 };

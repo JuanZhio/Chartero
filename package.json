@@ -1,6 +1,6 @@
 {
     "name": "chartero",
-    "version": "2.11.1",
+    "version": "3.0.0",
     "type": "module",
     "config": {
         "addonName": "Chartero",
@@ -54,14 +54,14 @@
         "format": "biome format . --write",
         "prepare": "husky",
         "git-modules": "git submodule update --init --recursive",
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "test": "tsx tools/history-kernel.test.ts"
     },
     "repository": {
         "type": "git",
         "url": "git+https://github.com/JuanZhio/Chartero.git"
     },
-    "author": "volatile static",
-    "license": "AGPL-2.0-or-later",
+    "author": "JuanZhio",
+    "license": "MIT",
     "bugs": {
         "url": "https://github.com/JuanZhio/Chartero/issues"
     },

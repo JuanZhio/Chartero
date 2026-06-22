@@ -1,10 +1,8 @@
-import { config } from '../../package.json';
-import { addDebugMenu } from './modules/debug';
-import { ICON_URL, DebuggerBackend } from './modules/utils';
 import { wait } from 'zotero-plugin-toolkit';
+import { config } from '../../package.json';
+import addItemColumns from './modules/columns';
+import { addDebugMenu } from './modules/debug';
 import { G } from './modules/global';
-import { mountMinimap, updateMinimap } from './modules/minimap/minimap';
-import { registerPanels, renderSummaryPanel, updateDashboard } from './modules/sidebar';
 import {
     hideDeleteMenuForHistory,
     initReaderAlert,
@@ -12,8 +10,10 @@ import {
     protectData,
 } from './modules/history/misc';
 import addImagesPanelForReader from './modules/images/images';
-import addItemColumns from './modules/columns';
+import { mountMinimap, updateMinimap } from './modules/minimap/minimap';
 import initPrefsPane from './modules/prefs';
+import { registerPanels, renderSummaryPanel, updateDashboard } from './modules/sidebar';
+import { DebuggerBackend, ICON_URL } from './modules/utils';
 
 const renderSummaryPanelDebounced = Zotero.Utilities.debounce(renderSummaryPanel, 333);
 
@@ -114,10 +114,10 @@ export function openOverview() {
         Zotero_Tabs.select(addon.overviewTabID);
         return;
     }
-    // 打开新的标签页
+
     const { id, container } = Zotero_Tabs.add({
         type: 'library',
-        title: 'Chartero',
+        title: addon.locale.overview,
         data: {},
         select: true,
         onClose: () => (addon.overviewTabID = undefined),
@@ -132,10 +132,21 @@ export function openOverview() {
                 flex: 1,
                 src: `chrome://${config.addonName}/content/overview/index.html`,
             },
+            styles: {
+                height: '100%',
+                width: '100%',
+            },
         },
         container,
     ) as HTMLIFrameElement;
-    (overview.contentWindow as any).addon = addon;
+    const injectAddon = () => {
+        const win = overview.contentWindow as any;
+        if (!win) return;
+        (win as any).addon = addon;
+        (win as any).wrappedJSObject && ((win as any).wrappedJSObject.addon = addon);
+    };
+    injectAddon();
+    addon.registerListener(overview, 'load', injectAddon, { once: true });
 }
 
 export function onHistoryRecord(reader: _ZoteroTypes.ReaderInstance) {
@@ -146,14 +157,14 @@ export function onHistoryRecord(reader: _ZoteroTypes.ReaderInstance) {
 }
 
 async function renderLibrarySummary(libraryID: number) {
-    const count = await Zotero.DB.valueQueryAsync(
-        "SELECT COUNT(*) FROM items I " +
-        "WHERE libraryID=? " +
-        "AND itemID NOT IN (SELECT itemID FROM deletedItems) " +
-        "AND itemID NOT IN (SELECT itemID FROM itemNotes) " +
-        "AND itemID NOT IN (SELECT itemID FROM itemAttachments)",
+    const count = (await Zotero.DB.valueQueryAsync(
+        'SELECT COUNT(*) FROM items I ' +
+            'WHERE libraryID=? ' +
+            'AND itemID NOT IN (SELECT itemID FROM deletedItems) ' +
+            'AND itemID NOT IN (SELECT itemID FROM itemNotes) ' +
+            'AND itemID NOT IN (SELECT itemID FROM itemAttachments)',
         [libraryID],
-    ) as number;
+    )) as number;
     if (count > addon.getPref('maxSummaryItems')) return;
     renderSummaryPanelDebounced(await Zotero.Items.getAllIDs(libraryID));
 }
@@ -196,8 +207,7 @@ export async function onItemSelect() {
         if (item.isRegularItem())
             // 只有常规条目才有仪表盘
             dashboard?.contentWindow?.postMessage({ id: items[0] }, '*');
-    } else
-        renderSummaryPanelDebounced(items); // 当前选择多个条目
+    } else renderSummaryPanelDebounced(items); // 当前选择多个条目
 }
 
 export async function onNotify(

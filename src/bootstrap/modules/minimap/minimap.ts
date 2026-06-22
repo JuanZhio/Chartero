@@ -1,6 +1,7 @@
-import renderMinimap from "./components";
-import stylesheet from "./minimap.sass";
-import { G } from "../global";
+import { G } from '../global';
+import { isScrollProgressResource, resolveReadingResource } from '../history/resource';
+import renderMinimap from './components';
+import stylesheet from './minimap.sass';
 
 export function mountMinimap(reader: _ZoteroTypes.ReaderInstance) {
     const doc = reader._iframeWindow!.document,
@@ -12,33 +13,41 @@ export function mountMinimap(reader: _ZoteroTypes.ReaderInstance) {
             properties: { textContent: stylesheet },
             ignoreIfExists: true,
         },
-        doc.head!
+        doc.head!,
     );
     let timer: ReturnType<typeof setTimeout>;
-    const container = addon.ui.appendElement({
-        tag: 'div',
-        id: 'chartero-minimap-container',
-        listeners: [
-            {
-                type: 'mouseenter',
-                listener: () => timer = setTimeout(() => container.classList.add('hovered'), 500)
-            }, {
-                type: 'mouseleave',
-                listener: () => {
-                    clearTimeout(timer);
-                    container.classList.remove('hovered');
-                }
-            }
-        ],
-        removeIfExists: true
-    }, outerContainer!) as HTMLDivElement;
+    const container = addon.ui.appendElement(
+        {
+            tag: 'div',
+            id: 'chartero-minimap-container',
+            listeners: [
+                {
+                    type: 'mouseenter',
+                    listener: () => (timer = setTimeout(() => container.classList.add('hovered'), 500)),
+                },
+                {
+                    type: 'mouseleave',
+                    listener: () => {
+                        clearTimeout(timer);
+                        container.classList.remove('hovered');
+                    },
+                },
+            ],
+            removeIfExists: true,
+        },
+        outerContainer!,
+    ) as HTMLDivElement;
     updateMinimap(reader);
 }
 
 export function updateMinimap(reader: _ZoteroTypes.ReaderInstance) {
     const doc = reader._iframeWindow!.document,
         container = doc.getElementById('chartero-minimap-container');
-    if (!container || reader.type == 'snapshot') return;
+    if (!container) return;
+    if (reader.type == 'snapshot') {
+        renderScrollMinimap(reader, container);
+        return;
+    }
 
     // 共用的变量：总页数、背景色、注释
     const numPages = reader._state.primaryViewStats.pagesCount!,
@@ -47,39 +56,38 @@ export function updateMinimap(reader: _ZoteroTypes.ReaderInstance) {
         seconds = history?.record.pageArr.map(p => p.totalS),
         maxSeconds = seconds?.reduce((a, b) => Math.max(a ?? 0, b ?? 0), 0),
         background = new Array<number>(numPages).fill(0).map((_, i) => {
-            let val = (history && maxSeconds) ?
-                200 * (1 - (history.record.pages[i]?.totalS ?? 0) / maxSeconds)
-                : 255;
+            let val =
+                history && maxSeconds ? 200 * (1 - (history.record.pages[i]?.totalS ?? 0) / maxSeconds) : 255;
             // 暗黑模式下反色
-            if (Zotero.getMainWindow().matchMedia('(prefers-color-scheme: dark)')?.matches)
-                val = 255 - val;
+            if (Zotero.getMainWindow().matchMedia('(prefers-color-scheme: dark)')?.matches) val = 255 - val;
             return val;
         }),
-        annArr: Array<AnnotationInfo[] | null> =
-            new Array<AnnotationInfo[]>(numPages);
+        annArr: Array<AnnotationInfo[] | null> = new Array<AnnotationInfo[]>(numPages);
 
     if (reader.type == 'pdf') {
         const view = reader._primaryView as _ZoteroTypes.Reader.PDFView,
-            pagesHeight = view._iframeWindow!.PDFViewerApplication.pdfViewer!
-                ._pages!.map((p: any) => p.viewport.viewBox[3]);
+            pagesHeight = view._iframeWindow!.PDFViewerApplication.pdfViewer!._pages!.map(
+                (p: any) => p.viewport.viewBox[3],
+            );
         for (const ann of annotations) {
             const pos = ann.position as _ZoteroTypes.Reader.PDFPosition,
-                arr = annArr[pos.pageIndex] ??= [];
+                arr = (annArr[pos.pageIndex] ??= []);
             arr.push({
                 color: ann.color ?? 'transparent',
-                rects: ann.type == 'ink' ?
-                    pos.paths!.map(path => {
-                        // 寻找Path的边界
-                        const y = path.filter((_, i) => i % 2 == 1);
-                        return {
-                            bottom: Math.min(...y),
-                            top: Math.max(...y),
-                        };
-                    }) :
-                    pos.rects?.map(r => ({
-                        bottom: r[1],
-                        top: r[3],
-                    })) ?? [],
+                rects:
+                    ann.type == 'ink'
+                        ? pos.paths!.map(path => {
+                              // 寻找Path的边界
+                              const y = path.filter((_, i) => i % 2 == 1);
+                              return {
+                                  bottom: Math.min(...y),
+                                  top: Math.max(...y),
+                              };
+                          })
+                        : (pos.rects?.map(r => ({
+                              bottom: r[1],
+                              top: r[3],
+                          })) ?? []),
             });
         }
         renderMinimap(container, { background, pagesHeight, annotations: annArr });
@@ -90,20 +98,20 @@ export function updateMinimap(reader: _ZoteroTypes.ReaderInstance) {
         }
         container.toggleAttribute('hidden', false);
         const view = reader._primaryView as _ZoteroTypes.Reader.EPUBView,
-            totalHeight = (view as any)
-                ._sectionsContainer.getBoundingClientRect().bottom,
-            mappingStr = (
-                reader._state.primaryViewState as _ZoteroTypes.Reader.EPUBViewState
-            ).savedPageMapping,
-            mappingArr: Array<[cfi: string, idx: string]> =
-                JSON.parse(mappingStr!)?.mappings,
+            totalHeight = (view as any)._sectionsContainer.getBoundingClientRect().bottom,
+            mappingStr = (reader._state.primaryViewState as _ZoteroTypes.Reader.EPUBViewState)
+                .savedPageMapping,
+            mappingArr: Array<[cfi: string, idx: string]> = JSON.parse(mappingStr!)?.mappings,
             cfiArr = mappingArr?.sort((a, b) => parseInt(a[1]) - parseInt(b[1])),
             ranges = cfiArr?.map(map => view.getRange('epubcfi(' + map[0] + ')')?.toRange()),
-            pagesHeight = ranges?.reduce((arr, range, i) => {
-                if (i == 0 || !range || !ranges[i - 1]) return arr;
-                return [...arr, range.getBoundingClientRect().y -
-                    ranges[i - 1]!.getBoundingClientRect().y];
-            }, [] as number[]) ?? [];
+            pagesHeight =
+                ranges?.reduce((arr, range, i) => {
+                    if (i == 0 || !range || !ranges[i - 1]) return arr;
+                    return [
+                        ...arr,
+                        range.getBoundingClientRect().y - ranges[i - 1]!.getBoundingClientRect().y,
+                    ];
+                }, [] as number[]) ?? [];
         // 相邻两页的差值
         pagesHeight.push(totalHeight - (ranges?.at(-1)?.getBoundingClientRect().bottom ?? 0));
 
@@ -112,25 +120,63 @@ export function updateMinimap(reader: _ZoteroTypes.ReaderInstance) {
                 range = view.getRange(pos.value)?.toRange(),
                 rect = range?.getBoundingClientRect(),
                 // 寻找当前注释所在的页码
-                idx = ranges.findIndex(
-                    r => r && r.compareBoundaryPoints(G('Range').END_TO_END, range!) > 0
-                ) - 1,
+                idx =
+                    ranges.findIndex(r => r && r.compareBoundaryPoints(G('Range').END_TO_END, range!) > 0) -
+                    1,
                 pageRect = ranges.at(idx)?.getBoundingClientRect(),
-                arr = annArr[idx] ??= [];
+                arr = (annArr[idx] ??= []);
             // epub暂时不存在ink注释
             arr.push({
                 color: ann.color ?? 'transparent',
-                rects: [{
-                    bottom: (rect?.bottom ?? 0) - (pageRect?.top ?? 0),
-                    top: (rect?.top ?? 0) - (pageRect?.top ?? 0),
-                }],
+                rects: [
+                    {
+                        bottom: (rect?.bottom ?? 0) - (pageRect?.top ?? 0),
+                        top: (rect?.top ?? 0) - (pageRect?.top ?? 0),
+                    },
+                ],
             });
         }
         renderMinimap(container, { background, pagesHeight, annotations: annArr });
     }
 }
 
+function renderScrollMinimap(reader: _ZoteroTypes.ReaderInstance, container: HTMLElement) {
+    const itemID = reader.itemID;
+    if (!itemID || !isScrollProgressResource(resolveReadingResource(itemID))) {
+        container.toggleAttribute('hidden', true);
+        return;
+    }
+    const history = addon.history.getByAttachment(itemID),
+        positions = history?.record.progress?.positions;
+    if (!positions) {
+        container.toggleAttribute('hidden', true);
+        return;
+    }
+
+    const bins = new Array(20).fill(0);
+    for (const [timestamp, ratio] of Object.entries(positions)) {
+        const duration = history.record.pages[0]?.period?.[Number(timestamp)] ?? 0,
+            index = Math.max(0, Math.min(bins.length - 1, Math.floor(ratio * bins.length)));
+        bins[index] += duration;
+    }
+
+    const maxSeconds = bins.reduce((a, b) => Math.max(a, b), 0),
+        dark = Zotero.getMainWindow().matchMedia('(prefers-color-scheme: dark)')?.matches,
+        background = bins.map(seconds => {
+            let val = maxSeconds ? 200 * (1 - seconds / maxSeconds) : 255;
+            if (dark) val = 255 - val;
+            return val;
+        });
+
+    container.toggleAttribute('hidden', false);
+    renderMinimap(container, {
+        background,
+        pagesHeight: bins.map(() => 1),
+        annotations: bins.map(() => null),
+    });
+}
+
 export interface AnnotationInfo {
     color: string;
-    rects: Array<{ bottom: number, top: number }>;
+    rects: Array<{ bottom: number; top: number }>;
 }

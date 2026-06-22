@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 var chromeHandle;
 
+async function install({ id, version, resourceURI, rootURI }, reason) {}
+
 async function startup({ id, version, resourceURI, rootURI }, reason) {
     Zotero.debug('~~~~~~ __addonName__ startup ~~~~~~');
 
@@ -56,3 +58,5 @@ async function shutdown({ id, version, resourceURI, rootURI }, reason) {
         chromeHandle = null;
     }
 }
+
+async function uninstall({ id, version, resourceURI, rootURI }, reason) {}

@@ -1,5 +1,7 @@
 <template>
-    <div v-show="activeTab == SectionTab.Progress" class="progress-dashboard">
+    <div v-show="activeTab == SectionTab.Overview" class="progress-dashboard">
+        <JournalInfo class="embedded-journal" :item="topLevel" embedded />
+
         <section class="progress-hero">
             <div class="progress-ring">
                 <t-tooltip :content="locale.readingProgressTip" :show-arrow="false">
@@ -10,7 +12,7 @@
                 <span class="progress-kicker">{{ locale.progressLabel.read }}</span>
                 <strong class="progress-title">{{ readingProgress }}%</strong>
                 <span class="progress-subtitle">
-                    {{ readPages }} {{ locale.pages }} / {{ numPages }} {{ locale.pages }}
+                    {{ progressDetail }}
                 </span>
             </div>
         </section>
@@ -21,7 +23,7 @@
                 <div class="metric-content">
                     <span class="metric-label">{{ locale.progressLabel.read }}</span>
                     <span class="metric-value">{{ readPages }} / {{ numPages }}</span>
-                    <span class="metric-unit">{{ locale.pages }}</span>
+                    <span class="metric-unit">{{ progressUnit }}</span>
                 </div>
             </article>
             <article class="metric-card">
@@ -45,7 +47,7 @@
         <section class="progress-workspace">
             <nav class="progress-tabs">
                 <button
-                    v-for="view in progressViews"
+                    v-for="view in visibleProgressViews"
                     :key="view.value"
                     type="button"
                     :class="{ active: progressView == view.value }"
@@ -71,7 +73,7 @@
                     </div>
                 </div>
                 <PageTime
-                    v-show="progressView == ProgressView.Page"
+                    v-show="hasPageProgress && progressView == ProgressView.Page"
                     class="progress-chart"
                     :history="itemHistory"
                     :theme="chartTheme"
@@ -91,8 +93,6 @@
         </section>
     </div>
 
-    <JournalInfo v-show="activeTab == SectionTab.Journal" :item="topLevel" />
-
     <UserPie v-show="activeTab == SectionTab.Group" :history="itemHistory" :theme="chartTheme" />
 
     <Network
@@ -105,22 +105,23 @@
 </template>
 
 <script lang="ts">
-import { nextTick } from 'vue';
-import { GridLightTheme, DarkUnicaTheme } from '@/themes';
-import PageTime from './components/pageTime.vue';
-import DateTime from './components/dateTime.vue';
-import TimeLine from './components/timeline.vue';
-import Network from './components/network.vue';
-import UserPie from './components/userPie.vue';
-import JournalInfo from './components/journalInfo.vue';
+import { type AnimationParams, animate, utils } from 'animejs';
 import { BookOpenIcon, FilePdfIcon, StickyNoteIcon } from 'tdesign-icons-vue-next';
-import { animate, utils, type AnimationParams } from 'animejs';
-import HistoryAnalyzer from '$/history/analyzer';
+import { nextTick } from 'vue';
+import { DarkUnicaTheme, GridLightTheme } from '@/themes';
 import type { AttachmentHistory } from '$/history/history';
+import { createReadingKernelSnapshot } from '$/history/kernel';
+import { getAttachmentProgress } from '$/history/progress';
 import { toTimeString } from '$/utils';
+import DateTime from './components/dateTime.vue';
+import JournalInfo from './components/journalInfo.vue';
+import Network from './components/network.vue';
+import PageTime from './components/pageTime.vue';
+import TimeLine from './components/timeline.vue';
+import UserPie from './components/userPie.vue';
 
 enum SectionTab {
-    Journal = 'journal',
+    Overview = 'overview',
     Progress = 'progress',
     Bubble = 'bubble',
     Group = 'group',
@@ -135,14 +136,24 @@ enum ProgressView {
 }
 
 export default {
-    components: { PageTime, DateTime, TimeLine, Network, UserPie, JournalInfo, BookOpenIcon, FilePdfIcon, StickyNoteIcon },
+    components: {
+        PageTime,
+        DateTime,
+        TimeLine,
+        Network,
+        UserPie,
+        JournalInfo,
+        BookOpenIcon,
+        FilePdfIcon,
+        StickyNoteIcon,
+    },
     data() {
         return {
             dark: false,
             locale: addon.locale,
             SectionTab,
             ProgressView,
-            activeTab: SectionTab.Journal,
+            activeTab: SectionTab.Overview,
             progressView: ProgressView.Overview,
             progressViews: [
                 { value: ProgressView.Overview, label: addon.locale.overview },
@@ -154,6 +165,7 @@ export default {
             noteWords: 0,
             readPages: 0,
             numPages: 0,
+            progressUnit: addon.locale.pages,
             numAttachment: 0,
             attachmentSize: '',
             item: null as null | Zotero.Item,
@@ -170,13 +182,21 @@ export default {
         },
         readingProgress(): number {
             if (this.itemHistory.length < 1) return 0;
-            const ha = new HistoryAnalyzer(this.itemHistory);
-            return ha.progress;
+            return this.kernelSnapshot.progressPercent;
         },
         totalReadTime(): string {
             if (this.itemHistory.length < 1) return '0' + addon.locale.seconds;
-            const total = this.itemHistory.reduce((sum, his) => sum + his.record.totalS, 0);
-            return toTimeString(total);
+            return toTimeString(this.kernelSnapshot.totalS);
+        },
+        progressDetail(): string {
+            if (this.progressUnit == '%') return `${this.readPages}% / ${this.numPages}%`;
+            return `${this.readPages} ${this.progressUnit} / ${this.numPages} ${this.progressUnit}`;
+        },
+        hasPageProgress(): boolean {
+            return this.kernelSnapshot.resourceCounts.pdf > 0 || this.kernelSnapshot.resourceCounts.epub > 0;
+        },
+        visibleProgressViews(): Array<{ value: ProgressView; label: string }> {
+            return this.progressViews.filter(view => view.value != ProgressView.Page || this.hasPageProgress);
         },
         chartTheme(): object {
             return this.dark ? DarkUnicaTheme : GridLightTheme;
@@ -200,6 +220,9 @@ export default {
             // addon.log('itemHistory: ', his);
             return his ? [his] : [];
         },
+        kernelSnapshot() {
+            return createReadingKernelSnapshot(this.itemHistory);
+        },
     },
     mounted() {
         const darkMedia = matchMedia('(prefers-color-scheme: dark)');
@@ -221,6 +244,8 @@ export default {
                     this.updateNotes();
                     this.updateProgress();
                     this.updateSize();
+                    if (this.progressView == ProgressView.Page && !this.hasPageProgress)
+                        this.progressView = ProgressView.Overview;
                 } catch (error) {
                     addon.log(error);
                 }
@@ -235,6 +260,7 @@ export default {
             document.querySelectorAll('div.highcharts-data-table').forEach(el => el.remove());
         },
         setProgressView(view: ProgressView) {
+            if (view == ProgressView.Page && !this.hasPageProgress) view = ProgressView.Overview;
             this.progressView = view;
             nextTick(() => dispatchEvent(new Event('resize')));
         },
@@ -252,14 +278,24 @@ export default {
             const att = this.isReader ? this.item : await this.topLevel?.getBestAttachment();
             let readPages = 0;
             let numPages = 0;
+            this.progressUnit = addon.locale.pages;
             if (att) {
                 const his = addon.history.getByAttachment(att);
                 if (his) {
-                    readPages = his.record.readPages;
-                    numPages = his.record.numPages ?? 0;
+                    const progress = getAttachmentProgress(his.record);
+                    if (progress.source == 'scroll') {
+                        readPages = Math.round(progress.ratio * 100);
+                        numPages = 100;
+                        this.progressUnit = '%';
+                    } else {
+                        readPages = progress.completedPages;
+                        numPages = progress.pageCount;
+                        this.progressUnit = addon.locale.pages;
+                    }
                 } else {
                     const fullPages = await Zotero.FullText.getPages(att.id);
                     numPages = fullPages ? fullPages.total : 0;
+                    this.progressUnit = addon.locale.pages;
                 }
             }
             animate(this, { ...this.animateInt, readPages, numPages });

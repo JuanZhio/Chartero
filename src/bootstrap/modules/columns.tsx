@@ -4,8 +4,8 @@ import {
     sanitizePublicationRankText,
     schedulePublicationRankUpdate,
 } from './easyScholar';
-import { toTimeString } from './utils';
 import { React } from './global';
+import { toTimeString } from './utils';
 
 function rankBadgeStyles(rank: string) {
     const kind = rankKind(rank),
@@ -58,9 +58,12 @@ function rankKind(rank: string) {
     if (/^(B\+?|Q2|T2|2|2区|二区|EI|科核|CSSCI|CSCD|北核)$/.test(grade)) return 'q2';
     if (/^(C\+?|Q3|T3|3|3区|三区)$/.test(grade)) return 'q3';
     if (/^(D\+?|E|Q4|T4|4|5|4区|四区)$/.test(grade)) return 'q4';
-    if (!/(中科院|JCR|IF|5IF|JCI|SCI|SSCI|CSSCI|CSCD|EI|AHCI|ESI|Q[1-4]|T[1-4])/.test(text))
-        return 'custom';
+    if (!/(中科院|JCR|IF|5IF|JCI|SCI|SSCI|CSSCI|CSCD|EI|AHCI|ESI|Q[1-4]|T[1-4])/.test(text)) return 'custom';
     return 'neutral';
+}
+
+function getColumnClassList(column: { className?: string }) {
+    return ['cell', ...(column.className ?? '').split(' ').filter(Boolean)];
 }
 
 export default function addItemColumns() {
@@ -83,7 +86,6 @@ export default function addItemColumns() {
         ),
         columnPickerSubMenu: true,
         pluginID: config.addonID,
-        disabledIn: ['feed', 'feeds'],
         zoteroPersist: ['width', 'hidden', 'sortDirection'],
         minWidth: 24,
         dataProvider: (item: Zotero.Item) => {
@@ -97,12 +99,17 @@ export default function addItemColumns() {
         },
         renderCell: (_, data, column) => {
             const doc = Zotero.getMainWindow().document;
-            return addon.ui.createElement(doc, 'span', {
-                properties: { textContent: toTimeString(data) },
-                classList: ['cell', ...column.className.split(' ')],
-                enableElementDOMLog: false,
-                enableElementRecord: false,
-            });
+            try {
+                return addon.ui.createElement(doc, 'span', {
+                    properties: { textContent: toTimeString(data ?? 0) },
+                    classList: getColumnClassList(column),
+                    enableElementDOMLog: false,
+                    enableElementRecord: false,
+                });
+            } catch (error) {
+                addon.log(error);
+                return doc.createElement('span');
+            }
         },
     });
 
@@ -111,8 +118,7 @@ export default function addItemColumns() {
         label: addon.locale.journalRank,
         columnPickerSubMenu: true,
         pluginID: config.addonID,
-        defaultIn: ['default'],
-        disabledIn: ['feed', 'feeds'],
+        enabledTreeIDs: ['main'],
         zoteroPersist: ['width', 'hidden', 'sortDirection'],
         minWidth: 72,
         dataProvider: (item: Zotero.Item) => {
@@ -126,27 +132,32 @@ export default function addItemColumns() {
             }
         },
         renderCell: (_, data, column) => {
-            const cleanedData = sanitizePublicationRankText(data);
-            const doc = Zotero.getMainWindow().document,
-                cell = addon.ui.createElement(doc, 'span', {
-                    classList: ['cell', ...column.className.split(' ')],
-                    enableElementDOMLog: false,
-                    enableElementRecord: false,
-                });
-            cell.setAttribute('title', cleanedData);
-            cleanedData
-                .split(/\s*\|\s*/)
-                .filter(Boolean)
-                .forEach(rank => {
-                    const badge = addon.ui.createElement(doc, 'span', {
-                        properties: { textContent: rank },
-                        styles: rankBadgeStyles(rank),
+            const doc = Zotero.getMainWindow().document;
+            try {
+                const cleanedData = sanitizePublicationRankText(data),
+                    cell = addon.ui.createElement(doc, 'span', {
+                        classList: getColumnClassList(column),
                         enableElementDOMLog: false,
                         enableElementRecord: false,
                     });
-                    cell.append(badge);
-                });
-            return cell;
+                cell.setAttribute('title', cleanedData);
+                cleanedData
+                    .split(/\s*\|\s*/)
+                    .filter(Boolean)
+                    .forEach(rank => {
+                        const badge = addon.ui.createElement(doc, 'span', {
+                            properties: { textContent: rank },
+                            styles: rankBadgeStyles(rank),
+                            enableElementDOMLog: false,
+                            enableElementRecord: false,
+                        });
+                        cell.append(badge);
+                    });
+                return cell;
+            } catch (error) {
+                addon.log(error);
+                return doc.createElement('span');
+            }
         },
     });
 }

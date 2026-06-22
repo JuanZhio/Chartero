@@ -1,12 +1,10 @@
-import { config } from "../../../package.json";
-import { G } from "./global";
+import { config } from '../../../package.json';
+import { G } from './global';
 
 const dashboards: { [id: number]: HTMLIFrameElement } = {};
 
 export function updateDashboard(id?: number) {
-    id &&
-        addon.getPref('enableRealTimeDashboard') &&
-        dashboards[id]?.contentWindow?.postMessage({ id }, '*');
+    id && addon.getPref('enableRealTimeDashboard') && dashboards[id]?.contentWindow?.postMessage({ id }, '*');
 }
 
 /**
@@ -19,14 +17,16 @@ export function registerPanels() {
             addon.log(new Error('Dashboard iframe not found'));
             return;
         }
-        if (iframe.contentDocument?.readyState === 'complete')
-            iframe.contentWindow.postMessage(message, '*');
+        if (iframe.contentDocument?.readyState === 'complete') iframe.contentWindow.postMessage(message, '*');
         else
-            iframe.addEventListener('load', ({ target }) =>
-                (target as Document).defaultView!.postMessage(message, '*'), true);
+            iframe.addEventListener(
+                'load',
+                ({ target }) => (target as Document).defaultView!.postMessage(message, '*'),
+                true,
+            );
         addon.log(message, iframe.contentDocument?.readyState);
     }
-    const tabs = ['journal', 'progress', 'group' /*'relation',*/];
+    const tabs = ['overview', 'group' /*'relation',*/];
 
     Zotero.ItemPaneManager.registerSection({
         paneID: 'chartero-dashboard',
@@ -42,44 +42,51 @@ export function registerPanels() {
         sectionButtons: tabs.map(tab => ({
             type: tab,
             l10nID: `chartero-dashboard-${tab}`,
-            icon: `resource://${config.addonName}/icons/${tab == 'journal' ? 'information.png' : `${tab}.svg`}`,
+            icon: `resource://${config.addonName}/icons/${tab == 'overview' ? 'information.png' : `${tab}.svg`}`,
             onClick(args) {
                 post(args.body, { tab });
                 args.setSectionButtonStatus(tab, { disabled: true });
                 args.setSectionButtonStatus(args.body.dataset.tab!, { disabled: false });
                 args.body.dataset.tab = tab;
-            }
+            },
         })),
         onInit: args => {
-            const iframe = addon.ui.appendElement({
-                tag: 'iframe',
-                namespace: 'xul',
-                attributes: { src: 'chrome://chartero/content/dashboard/index.html' },
-                styles: { height: '100%', width: '100%' },
-                enableElementRecord: false,
-            }, args.body) as HTMLIFrameElement,
-                ResizeObserver = G('ResizeObserver'),  // 切换页面时自动调整高度
+            const iframe = addon.ui.appendElement(
+                    {
+                        tag: 'iframe',
+                        namespace: 'xul',
+                        attributes: { src: 'chrome://chartero/content/dashboard/index.html' },
+                        styles: { height: '100%', width: '100%' },
+                        enableElementRecord: false,
+                    },
+                    args.body,
+                ) as HTMLIFrameElement,
+                ResizeObserver = G('ResizeObserver'), // 切换页面时自动调整高度
                 observer = new ResizeObserver(
-                    ([entry]) => entry && (args.body.style.height = `${entry.contentRect.height}px`)
+                    ([entry]) => entry && (args.body.style.height = `${entry.contentRect.height}px`),
                 );
             (iframe.contentWindow as any).wrappedJSObject.addon = addon;
-            iframe.addEventListener('load', ({ target }) => {
-                observer.observe((target as Document).documentElement!);
-            }, true);
+            iframe.addEventListener(
+                'load',
+                ({ target }) => {
+                    observer.observe((target as Document).documentElement!);
+                },
+                true,
+            );
 
             // 默认第一页
-            args.setSectionButtonStatus('journal', { disabled: true });
-            args.body.dataset.tab = 'journal';
+            args.setSectionButtonStatus('overview', { disabled: true });
+            args.body.dataset.tab = 'overview';
         },
-        onRender: () => { },
+        onRender: () => {},
         onItemChange: args => {
             const hidden = args.item.libraryID == Zotero.Libraries.userLibraryID;
             args.setSectionButtonStatus('group', { hidden });
             if (hidden && args.body.dataset.tab == 'group') {
-                args.setSectionButtonStatus('journal', { disabled: true });
+                args.setSectionButtonStatus('overview', { disabled: true });
                 args.setSectionButtonStatus('group', { disabled: false });
-                args.body.dataset.tab = 'journal';
-                post(args.body, { tab: 'journal' });
+                args.body.dataset.tab = 'overview';
+                post(args.body, { tab: 'overview' });
             }
             post(args.body, { id: args.item.id });
         },
@@ -87,15 +94,9 @@ export function registerPanels() {
 }
 
 export function renderSummaryPanel(ids: number[]) {
-    if (
-        !ids.length ||
-        ids.length > addon.getPref('maxSummaryItems')
-    )
-        return;
+    if (!ids.length || ids.length > addon.getPref('maxSummaryItems')) return;
     const win = Zotero.getMainWindow(),
-        content = win.document.getElementById(
-            'zotero-item-pane-content'
-        ) as unknown as XULDeckElement,
+        content = win.document.getElementById('zotero-item-pane-content') as unknown as XULDeckElement,
         summary: any = addon.ui.createElement(win.document, 'iframe', {
             namespace: 'xul',
             id: 'chartero-summary-iframe',
@@ -103,15 +104,13 @@ export function renderSummaryPanel(ids: number[]) {
             attributes: {
                 src: 'chrome://chartero/content/summary/index.html',
             },
-            styles: { height: '100%', width: '100%' }
+            styles: { height: '100%', width: '100%' },
         });
 
     if (summary.parentElement != content) {
         content.appendChild(summary);
         summary.contentWindow.wrappedJSObject.addon = addon;
-        summary.contentWindow.addEventListener('load', () =>
-            summary.contentWindow.postMessage(ids)
-        );
+        summary.contentWindow.addEventListener('load', () => summary.contentWindow.postMessage(ids));
     } else summary.contentWindow.postMessage(ids);
     content.selectedPanel = summary;
 }

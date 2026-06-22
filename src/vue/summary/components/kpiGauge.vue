@@ -1,10 +1,10 @@
 <script lang="ts">
 import type { Options } from 'highcharts';
-import type { AttachmentHistory } from '$/history/history';
 import { Chart } from 'highcharts-vue';
 import Highcharts from '@/highcharts';
 import { helpMessageOption } from '@/utils';
-import HistoryAnalyzer from '$/history/analyzer';
+import type { AttachmentHistory } from '$/history/history';
+import { createReadingKernelSnapshot } from '$/history/kernel';
 export default {
     components: { Chart },
     props: {
@@ -29,10 +29,10 @@ export default {
     },
     computed: {
         chartOpts() {
-            const ha = new HistoryAnalyzer(this.history);
+            const kernel = createReadingKernelSnapshot(this.history);
             let finished = 0;
             for (const h of this.history)
-                if (h.record.pageArr.length / (h.record.numPages ?? Infinity) >= 0.98) ++finished;
+                if (createReadingKernelSnapshot([h]).progressPercent >= 98) ++finished;
             console.debug(finished);
             return {
                 exporting: { menuItemDefinitions: helpMessageOption(this.locale.doc.kpiGauge) },
@@ -119,7 +119,7 @@ export default {
                                 colorIndex: 3,
                                 radius: '87%',
                                 innerRadius: '63%',
-                                y: ha.progress,
+                                y: kernel.progressPercent,
                             },
                         ],
                     },

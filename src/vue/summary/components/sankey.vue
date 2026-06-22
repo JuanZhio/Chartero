@@ -1,18 +1,18 @@
 <script lang="ts">
-import { Chart } from 'highcharts-vue';
 import type {
     Options,
+    SankeyNodeObject,
+    SeriesSankeyNodesOptionsObject,
     SeriesSankeyOptions,
     SeriesSankeyPointOptionsObject,
-    SeriesSankeyNodesOptionsObject,
-    SankeyNodeObject,
 } from 'highcharts';
-import { toTimeString } from '$/utils';
-import { creator2str, helpMessageOption } from '@/utils';
-import HistoryAnalyzer from '$/history/analyzer';
+import { Chart } from 'highcharts-vue';
 import Highcharts from '@/highcharts';
-import DualSelect from './dualSelect.vue';
+import { creator2str, helpMessageOption } from '@/utils';
 import type { AttachmentHistory } from '$/history/history';
+import { createReadingKernelSnapshot } from '$/history/kernel';
+import { toTimeString } from '$/utils';
+import DualSelect from './dualSelect.vue';
 
 const MAX_SANKEY_ITEMS = 180;
 const MAX_SANKEY_LINKS = 80;
@@ -120,7 +120,7 @@ export default {
                                 item.getField('proceedingsTitle') ||
                                 item.getField('university'),
                             itemHistory = this.itemHistories[index] ?? [],
-                            totalSeconds = new HistoryAnalyzer(itemHistory).totalS;
+                            totalSeconds = createReadingKernelSnapshot(itemHistory).totalS;
                         // addon.log({firstCreator, lastCreator, journal, totalSeconds});
                         return { itemID: item.id, firstCreator, lastCreator, journal, totalSeconds };
                     })

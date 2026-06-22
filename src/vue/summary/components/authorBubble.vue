@@ -1,16 +1,16 @@
 <script lang="ts">
-import { Chart } from 'highcharts-vue';
 import type {
     Options,
     PointClickEventObject,
     PointOptionsObject,
     SeriesPackedbubbleOptions,
 } from 'highcharts';
-import type { AttachmentHistory } from '$/history/history';
+import { Chart } from 'highcharts-vue';
 import { defineComponent, nextTick } from 'vue';
-import { helpMessageOption } from '@/utils';
 import Highcharts from '@/highcharts';
-import HistoryAnalyzer from '$/history/analyzer';
+import { helpMessageOption } from '@/utils';
+import type { AttachmentHistory } from '$/history/history';
+import { createReadingKernelSnapshot, getHistoryItem } from '$/history/kernel';
 import { toTimeString } from '$/utils';
 
 async function processSeries(creatorIDs: number[], themeColors: string[]) {
@@ -20,11 +20,10 @@ async function processSeries(creatorIDs: number[], themeColors: string[]) {
             itemsPro = itemIDs.map(id => zotero.Items.getAsync(id)),
             items = await Promise.all(itemsPro),
             dataPro = items.map(async it => {
-                const his = await addon.history.getInTopLevel(it),
-                    ha = new HistoryAnalyzer(his);
+                const his = await addon.history.getInTopLevel(it);
                 return {
                     name: it.getField('title'),
-                    value: ha.totalS,
+                    value: createReadingKernelSnapshot(his).totalS,
                     custom: {
                         libraryID: it.libraryID,
                         itemID: it.id,
@@ -158,8 +157,9 @@ export default defineComponent({
     },
     methods: {
         updateSeries(his: AttachmentHistory[]) {
-            const ha = new HistoryAnalyzer(his),
-                topLevels = ha.parents,
+            const topLevels = his
+                    .map(history => getHistoryItem(history)?.parentItem)
+                    .filter((item): item is Zotero.Item => !!item?.isRegularItem()),
                 creatorIDs = topLevels.map(it => it && (it as any)._creatorIDs).flat(),
                 uniqueCreatorIDs = Array.from(new Set(creatorIDs)),
                 themeColors =
@@ -174,8 +174,7 @@ export default defineComponent({
                 nextTick(() => {
                     if (chart.series.length) (chart as any).hideNoData();
                     else (chart as any).showNoData();
-                    for (let i = 6; i < chart.series.length; ++i) 
-                        chart.series[i].setVisible(false, false); // TODO: 切换时似乎未执行
+                    for (let i = 6; i < chart.series.length; ++i) chart.series[i].setVisible(false, false); // TODO: 切换时似乎未执行
                     chart.hideLoading();
                 });
             });
