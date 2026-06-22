@@ -42,7 +42,7 @@ export function mountMinimap(reader: _ZoteroTypes.ReaderInstance) {
 
 export function updateMinimap(reader: _ZoteroTypes.ReaderInstance) {
     const doc = reader._iframeWindow!.document,
-        container = doc.getElementById('chartero-minimap-container');
+        container = doc.getElementById('chartero-minimap-container') as HTMLElement | null;
     if (!container) return;
     if (reader.type == 'snapshot') {
         renderScrollMinimap(reader, container);

@@ -13,8 +13,16 @@ export interface ReaderActivityState {
 
 type ReaderViewState = _ZoteroTypes.Reader.State | _ZoteroTypes.Reader.DOMViewState | null;
 
+function isEPUBViewState(state: ReaderViewState): state is _ZoteroTypes.Reader.EPUBViewState {
+    return !!state && 'cfi' in state && (typeof state.cfi == 'string' || typeof state.cfi == 'undefined');
+}
+
 export function isSnapshotViewState(state: ReaderViewState): state is _ZoteroTypes.Reader.SnapshotViewState {
-    return !!state && 'scrollYPercent' in state;
+    return (
+        !!state &&
+        'scrollYPercent' in state &&
+        (typeof state.scrollYPercent == 'number' || typeof state.scrollYPercent == 'undefined')
+    );
 }
 
 export function getScrollProgress(itemID: number, state: ReaderViewState): StoredScrollProgress | undefined {
@@ -44,8 +52,8 @@ export function isReaderStateActive(
     scanTimeout: number,
 ): boolean {
     if (!current) return false;
-    if ('cfi' in current) updateEPUBState(previous, current, elapsedSeconds);
-    else if ('scrollYPercent' in current) updateSnapshotState(previous, current, elapsedSeconds);
+    if (isEPUBViewState(current)) updateEPUBState(previous, current, elapsedSeconds);
+    else if (isSnapshotViewState(current)) updateSnapshotState(previous, current, elapsedSeconds);
     else updatePDFState(previous, current as _ZoteroTypes.Reader.State, elapsedSeconds);
     return previous.counter < scanTimeout;
 }
