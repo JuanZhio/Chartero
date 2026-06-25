@@ -62,6 +62,19 @@ Vue 测试页面：
 npm run dev
 ```
 
+质量检查：
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+```
+
+`typecheck` 会检查 `worker`、`bootstrap`、`tools` 和 `vue` 四部分。发布或提交较大改动前建议同时运行：
+
+```bash
+npm run build
+```
 
 ## 目录结构
 
@@ -78,6 +91,19 @@ doc/          截图和文档资源
 ## 配置
 
 默认设置位于 `package.json` 的 `config.defaultSettings`。
+
+常用 npm 脚本：
+
+```text
+npm run build             生产构建完整插件
+npm run build-dev         开发构建完整插件
+npm run build-bootstrap   仅构建插件 bootstrap 部分
+npm run build-watch       监听构建
+npm run dev               启动 Vue 测试页面
+npm run lint              运行 Biome lint
+npm run typecheck         运行全部 TypeScript 类型检查
+npm test                  运行阅读历史核心测试
+```
 
 插件 ID：
 
@@ -97,4 +123,4 @@ https://github.com/JuanZhio/Chartero/releases/download/update/update.json
 
 ## 许可证
 
-AGPL-2.0-or-later
+Apache-2.0，详见 `LICENSE`。

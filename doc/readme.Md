@@ -110,20 +110,45 @@ _Chartero_ 这个名字是连接了 **Char**t 与 Zo**tero**，作为一个[Zote
 
 ### 开发环境
 
-[package.json](../package.json)中定义了构建项目所需的 npm 脚本，修改[tools/zotero-cmd.json](../tools/zotero-cmd-template.json)后，在 vscode 的主菜单`Run Task…`中选择指令`npm: build`即可以开发模式全部编译并重载 Zotero。使用带有`NODE_ENV=development`的指令时，全局变量`__dev__`为`true`，插件进入调试模式，此时[debug.ts](../src/bootstrap/modules/debug.ts)会注册一些调试用的选项。
+[package.json](../package.json)中定义了构建、检查和发布所需的 npm 脚本。开发前先安装依赖：
 
-- 以下列出了一些常用的指令：
-  - `reload-all`：以**生产**环境全部编译并重载 Zotero
-  - `reload-dev`：以**开发**环境跳过vue部分的编译并重载 Zotero
-  - `build`：以**开发**环境全部编译并重载 Zotero
-  - `watch`：实时监听Vue更改并编译后重载 Zotero
-  - `dev`：开启vue测试模块热重载
+```bash
+npm install
+```
+
+常用指令：
+
+| 指令 | 用途 |
+| :--- | :--- |
+| `npm run build` | 生产模式完整构建插件，产物位于 `build/chartero.xpi` |
+| `npm run build-dev` | 开发模式完整构建插件 |
+| `npm run build-bootstrap` | 开发模式仅构建 bootstrap/worker 相关代码 |
+| `npm run build-watch` | 监听构建 |
+| `npm run build-watch-full` | 监听并完整构建 |
+| `npm run dev` | 启动 Vue 测试页面 |
+| `npm run lint` | 使用 Biome 检查代码 |
+| `npm run lint:fix` | 使用 Biome 自动修复 lint 问题 |
+| `npm run format` | 使用 Biome 格式化代码 |
+| `npm run typecheck` | 检查 `worker`、`bootstrap`、`tools` 和 `vue` 类型 |
+| `npm test` | 运行阅读历史核心测试 |
+| `npm run release` | 运行发布脚本 |
+
+提交较大改动前建议至少运行：
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+开发构建中全局变量`__dev__`为`true`，插件进入调试模式，此时[debug.ts](../src/bootstrap/modules/debug.ts)会注册一些调试用的菜单项，并开放调试控制台相关能力。生产构建不会注册这些入口。
 
 ### ⚡热重载与源码断点
 
 开启Zotero的状态下，在VS Code的侧边栏调试面板中运行`Vue`配置可以开启Vue测试模块的热重载并呼出Firefox，此时可以在Firefox中使用[Vue调试插件](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)，也可以在VS Code中设置断点进行单步调试。
 
-插件在开发环境下会在[本地服务器](https://www.zotero.org/support/dev/client_coding/connector_http_server)注册一个`/test/chartero`的路由，该节点会`eval`任何POST请求来的指令并以JSON格式返回结果。[Vue测试模块](../src/vue/test/)提供了一系列“dummy”类，通过访问`/test/chartero`路由来仿真Zotero环境，此方法对其他 Zotero 客户端应用具有借鉴价值。
+插件仅在开发环境下会在[本地服务器](https://www.zotero.org/support/dev/client_coding/connector_http_server)注册一个`/test/chartero`的路由，该节点会执行 POST 请求中的调试指令并以 JSON 格式返回结果。[Vue测试模块](../src/vue/test/)提供了一系列“dummy”类，通过访问`/test/chartero`路由来仿真 Zotero 环境，此方法对其他 Zotero 客户端应用具有借鉴价值。生产构建中该调试后端会拒绝执行。
 
 ### 阅读记录结构
 
