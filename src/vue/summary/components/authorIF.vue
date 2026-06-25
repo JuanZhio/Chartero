@@ -13,7 +13,11 @@ export default {
         theme: Object,
     },
     data() {
-        return { locale: addon.locale, isDark: false };
+        return {
+            locale: addon.locale,
+            isDark: false,
+            colorScheme: undefined as MediaQueryList | undefined,
+        };
     },
     computed: {
         chartOpts() {
@@ -51,9 +55,17 @@ export default {
         },
     },
     mounted() {
-        const colorScheme = matchMedia('(prefers-color-scheme: dark)');
-        this.isDark = colorScheme?.matches ?? false;
-        colorScheme?.addEventListener('change', e => (this.isDark = e.matches));
+        this.colorScheme = matchMedia('(prefers-color-scheme: dark)') ?? undefined;
+        this.isDark = this.colorScheme?.matches ?? false;
+        this.colorScheme?.addEventListener('change', this.handleColorSchemeChange);
+    },
+    beforeUnmount() {
+        this.colorScheme?.removeEventListener('change', this.handleColorSchemeChange);
+    },
+    methods: {
+        handleColorSchemeChange(e: MediaQueryListEvent) {
+            this.isDark = e.matches;
+        },
     },
 };
 </script>

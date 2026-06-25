@@ -1,23 +1,23 @@
 <script lang="ts">
 import {
-    TreeRoundDotVerticalIcon,
-    ChartRadialIcon,
     ChartColumnIcon,
-    ChartRingIcon,
-    FormatVerticalAlignRightIcon,
-    CloudIcon,
     ChartPieIcon,
+    ChartRadialIcon,
+    ChartRingIcon,
+    CloudIcon,
+    FormatVerticalAlignRightIcon,
+    TreeRoundDotVerticalIcon,
 } from 'tdesign-icons-vue-next';
-import Gantt from './components/gantt.vue';
-import AuthorBubble from './components/authorBubble.vue';
-import Sankey from './components/sankey.vue';
-import WordCloud from './components/wordCloud.vue';
-import TagsPie from './components/tagsPie.vue';
-import KpiGauge from './components/kpiGauge.vue';
-import JCR from './components/jcr.vue';
-import authorIF from './components/authorIF.vue';
-import { GridLightTheme, DarkUnicaTheme } from '@/themes';
+import { DarkUnicaTheme, GridLightTheme } from '@/themes';
 import type { AttachmentHistory } from '$/history/history';
+import AuthorBubble from './components/authorBubble.vue';
+import authorIF from './components/authorIF.vue';
+import Gantt from './components/gantt.vue';
+import JCR from './components/jcr.vue';
+import KpiGauge from './components/kpiGauge.vue';
+import Sankey from './components/sankey.vue';
+import TagsPie from './components/tagsPie.vue';
+import WordCloud from './components/wordCloud.vue';
 
 const SUMMARY_BATCH_SIZE = 24;
 
@@ -48,6 +48,7 @@ export default {
             itemHistories: new Array<AttachmentHistory[]>(),
             items: new Array<Zotero.Item>(),
             summaryVersion: 0,
+            colorScheme: undefined as MediaQueryList | undefined,
             panelStyle: {
                 height: window.innerHeight - 71 + 'px',
                 overflow: 'scroll',
@@ -61,10 +62,23 @@ export default {
         },
     },
     mounted() {
-        const colorScheme = matchMedia('(prefers-color-scheme: dark)');
-        colorScheme?.addEventListener('change', e => this.switchTheme(e.matches));
+        this.colorScheme = matchMedia('(prefers-color-scheme: dark)') ?? undefined;
+        this.colorScheme?.addEventListener('change', this.handleColorSchemeChange);
 
-        window.addEventListener('message', async e => {
+        window.addEventListener('message', this.handleMessage);
+        window.addEventListener('resize', this.handleResize);
+        this.switchTheme(this.isDark);
+    },
+    beforeUnmount() {
+        this.colorScheme?.removeEventListener('change', this.handleColorSchemeChange);
+        window.removeEventListener('message', this.handleMessage);
+        window.removeEventListener('resize', this.handleResize);
+    },
+    methods: {
+        handleColorSchemeChange(e: MediaQueryListEvent) {
+            this.switchTheme(e.matches);
+        },
+        async handleMessage(e: MessageEvent) {
             if (!Array.isArray(e.data) || e.data.length < 1) return; // TODO: show message
 
             this.messageContent =
@@ -86,13 +100,10 @@ export default {
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
             // addon.log(`Summary items: ${this.items.length}, history: ${this.itemHistory.length}`)
-        });
-        window.addEventListener('resize', () => {
+        },
+        handleResize() {
             this.panelStyle.height = window.innerHeight - 71 + 'px';
-        });
-        this.switchTheme(this.isDark);
-    },
-    methods: {
+        },
         switchTheme(dark: boolean) {
             this.isDark = dark;
             if (dark) document.documentElement.setAttribute('theme-mode', 'dark');

@@ -111,6 +111,7 @@ export default class ReadingHistory extends ManagerTool {
                 Promise.all(
                     Zotero.Groups.getAll()
                         .map((group: Zotero.Group) => Zotero.Groups.getLibraryIDFromGroupID(group.id))
+                        .filter((libID): libID is number => typeof libID == 'number')
                         .map(loadLib),
                 ).then(() => {
                     this._loadingPromise.resolve();
@@ -465,7 +466,7 @@ export default class ReadingHistory extends ManagerTool {
 
             Object.keys(page.period)
                 .map(t => parseInt(t))
-                .filter(t => !isNaN(t))
+                .filter(t => !Number.isNaN(t))
                 .forEach(t => {
                     if (t - start == total) {
                         // 相连的时间戳合并

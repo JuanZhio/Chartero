@@ -121,7 +121,7 @@ async function drawVariablePie() {
 
     for (const collection of collections) {
         const items =
-                collection instanceof Zotero.Collection
+                'getChildItems' in collection
                     ? collection.getChildItems()
                     : Zotero.Items.get(await collection.search()),
             drilldownData = items.reduce(process, []),
@@ -138,7 +138,7 @@ async function drawVariablePie() {
             name: collection.name,
             drilldown: collection.name,
             y: items.length,
-            z: items.reduce((sum, item) => sum + getTime(item), 0),
+            z: items.reduce((sum: number, item: Zotero.Item) => sum + getTime(item), 0),
         });
         series.push({
             name: collection.name,
@@ -202,8 +202,8 @@ function buildTagInvestmentStats(records: LiteratureRecord[]): TagInvestmentStat
         const item = Zotero.Items.get(record.id);
         for (const tagName of item
             .getTags()
-            .filter(t => t.type)
-            .map(t => t.tag)) {
+            .filter((t: { type?: unknown; tag: string }) => t.type)
+            .map((t: { type?: unknown; tag: string }) => t.tag)) {
             const tagID = Zotero.Tags.getID(tagName);
             if (isTagExcluded(tagName, tagID, excludedTags, excludedTagRegexes)) continue;
             const stat = tags.get(tagName) ?? { name: tagName, totalS: 0, count: 0, percent: 0 };

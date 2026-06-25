@@ -8,7 +8,9 @@ export const ICON_URL = 'resource://chartero/icons/icon.svg';
 // export { renderToStaticMarkup };
 
 export function copySVG2JPG(svg: string) {
-    const Blob = G('Blob'), Image = G('Image'), img = new Image();
+    const Blob = G('Blob'),
+        Image = G('Image'),
+        img = new Image();
     img.onload = () => {
         const canvas = G('document').createElement('canvas'),
             ctx = canvas?.getContext('2d');
@@ -20,21 +22,17 @@ export function copySVG2JPG(svg: string) {
     img.src = URL.createObjectURL(
         new Blob([svg], {
             type: 'image/svg+xml;charset-utf-16',
-        })
+        }),
     );
 }
 
 export async function saveSVG(svg: string) {
-    const result = await new FilePickerHelper(
-        addon.locale.saveSVG,
-        'save',
-        [[addon.locale.svg, '*.svg']]
-    ).open();
+    const result = await new FilePickerHelper(addon.locale.saveSVG, 'save', [
+        [addon.locale.svg, '*.svg'],
+    ]).open();
     if (result) {
         const File = addon.getGlobal('FileUtils').File;
-        addon
-            .getGlobal('Zotero')
-            .File.putContents(new File(result + '.svg'), svg);
+        addon.getGlobal('Zotero').File.putContents(new File(result + '.svg'), svg);
     }
 }
 
@@ -54,15 +52,12 @@ export function toTimeString(seconds: number | string) {
             hour: Math.floor(s / 3600),
         };
     }
-    const tim = s2hour(
-        typeof seconds == 'number' ? seconds : parseInt(seconds)
-    );
+    const tim = s2hour(typeof seconds == 'number' ? seconds : parseInt(seconds));
     let label = '';
     if (tim.hour) label = tim.hour + addon.locale.hours;
     if (tim.minute) label += tim.minute + addon.locale.minutes;
     if (label.length < 1) label = seconds + addon.locale.seconds;
-    else if (!tim.hour && tim.second)
-        label += tim.second + addon.locale.seconds;
+    else if (!tim.hour && tim.second) label += tim.second + addon.locale.seconds;
     return label;
 }
 
@@ -79,20 +74,24 @@ async function patchFileURL(url: string) {
         reader.onload = event => {
             resolve(reader.result as string);
         };
-        reader.onerror = error => { throw error; };
+        reader.onerror = error => {
+            throw error;
+        };
         reader.readAsDataURL(blob);
     });
 }
 
 async function evalCmd(cmd: string) {
+    if (!__dev__) throw new Error('Debugger backend is only available in development builds.');
     addon.log('eval cmd:', cmd);
-    const result = new Function(
-        'Zotero', 'ZoteroPane', 'addon', 'return ' + cmd
-    )(Zotero, Zotero.getActiveZoteroPane(), addon);
+    const result = new Function('Zotero', 'ZoteroPane', 'addon', 'return ' + cmd)(
+        Zotero,
+        Zotero.getActiveZoteroPane(),
+        addon,
+    );
     addon.log(result);
 
-    if (typeof result == 'string')
-        return patchFileURL(result);
+    if (typeof result == 'string') return patchFileURL(result);
     return result;
 }
 
@@ -101,27 +100,30 @@ export class DebuggerBackend implements _ZoteroTypes.Server.Endpoint {
     init: _ZoteroTypes.Server.initMethodPromise = async function (options) {
         const headers = {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*' // 允许跨域
+            'Access-Control-Allow-Origin': '*', // 允许跨域
         };
         try {
             const result = await evalCmd(options.data);
             return [200, headers, JSON.stringify(result ?? null)];
         } catch (error) {
-            Zotero.logError(error);
-            if (error instanceof Error)
-                return [400, headers, JSON.stringify({ msg: error.message })];
+            Zotero.logError(error instanceof Error ? error : new Error(String(error)));
+            if (error instanceof Error) return [400, headers, JSON.stringify({ msg: error.message })];
             return [500, headers, JSON.stringify(error)];
         }
     };
 }
 
-export type PdfImageListener = (pageNum: number, imageNum: number, payload: {
-    data: ImageBitmap,
-    id: number,
-    rect: number[],
-    pageIdx: number,
-    // path: string
-}) => void;
+export type PdfImageListener = (
+    pageNum: number,
+    imageNum: number,
+    payload: {
+        data: ImageBitmap;
+        id: number;
+        rect: number[];
+        pageIdx: number;
+        // path: string
+    },
+) => void;
 export class WorkerManager extends WorkerManagerBase<Worker> {
     private readonly pdfListeners: Record<string, PdfImageListener> = {};
 
@@ -136,7 +138,7 @@ export class WorkerManager extends WorkerManagerBase<Worker> {
                 response: {
                     id: request.id,
                     error: serializeWorkerError(error),
-                } as WorkerResponse
+                } as WorkerResponse,
             });
         }
     }
@@ -154,8 +156,7 @@ export class WorkerManager extends WorkerManagerBase<Worker> {
     }
     async close() {
         await this.query('close');
-        if (__dev__)
-            addon.log('worker terminated');
+        if (__dev__) addon.log('worker terminated');
         this.that.terminate();
     }
 }
@@ -171,19 +172,19 @@ function serializeWorkerError(error: unknown): WorkerResponse['error'] {
 }
 
 export function isPDFReader(
-    reader: _ZoteroTypes.ReaderInstance
+    reader: _ZoteroTypes.ReaderInstance,
 ): reader is _ZoteroTypes.ReaderInstance<'pdf'> {
     return reader.type == 'pdf';
 }
 
 export function isEpubReader(
-    reader: _ZoteroTypes.ReaderInstance
+    reader: _ZoteroTypes.ReaderInstance,
 ): reader is _ZoteroTypes.ReaderInstance<'epub'> {
     return reader.type == 'epub';
 }
 
 export function isWebReader(
-    reader: _ZoteroTypes.ReaderInstance
+    reader: _ZoteroTypes.ReaderInstance,
 ): reader is _ZoteroTypes.ReaderInstance<'snapshot'> {
     return reader.type == 'snapshot';
 }

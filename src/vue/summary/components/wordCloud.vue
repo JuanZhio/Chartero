@@ -130,11 +130,17 @@ export default {
         },
     },
     mounted() {
-        addEventListener('message', e => {
+        addEventListener('message', this.handleMessage);
+    },
+    beforeUnmount() {
+        removeEventListener('message', this.handleMessage);
+    },
+    methods: {
+        handleMessage(e: MessageEvent) {
             if (e.data != 'updateExcludedTags') return;
             this.filteredTags = getExcludedTagIDs();
             this.excludedTagRegexes = compileExcludedTagPatterns();
-        });
+        },
     },
 };
 </script>

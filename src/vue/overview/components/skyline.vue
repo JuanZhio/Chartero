@@ -58,6 +58,7 @@ export default {
                 : { less: 'Less', more: 'More' },
             legendColors: [] as string[],
             loading: true,
+            colorScheme: undefined as MediaQueryList | undefined,
         };
     },
     computed: {
@@ -70,10 +71,16 @@ export default {
     },
     mounted() {
         setTimeout(this.init, 10);
-        const colorScheme = matchMedia('(prefers-color-scheme: dark)');
-        colorScheme?.addEventListener('change', e => this.init(e.matches));
+        this.colorScheme = matchMedia('(prefers-color-scheme: dark)') ?? undefined;
+        this.colorScheme?.addEventListener('change', this.handleColorSchemeChange);
+    },
+    beforeUnmount() {
+        this.colorScheme?.removeEventListener('change', this.handleColorSchemeChange);
     },
     methods: {
+        handleColorSchemeChange(e: MediaQueryListEvent) {
+            this.init(e.matches);
+        },
         init(isDark: boolean) {
             const now = this.now,
                 firstDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() - 364);

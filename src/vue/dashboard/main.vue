@@ -169,6 +169,7 @@ export default {
             numAttachment: 0,
             attachmentSize: '',
             item: null as null | Zotero.Item,
+            darkMedia: undefined as MediaQueryList | undefined,
             animateInt: {
                 modifier: utils.round(0),
                 duration: 260,
@@ -225,11 +226,21 @@ export default {
         },
     },
     mounted() {
-        const darkMedia = matchMedia('(prefers-color-scheme: dark)');
-        darkMedia?.addEventListener('change', e => this.switchTheme(e.matches));
-        this.switchTheme(darkMedia?.matches ?? false);
+        this.darkMedia = matchMedia('(prefers-color-scheme: dark)') ?? undefined;
+        this.darkMedia?.addEventListener('change', this.handleColorSchemeChange);
+        this.switchTheme(this.darkMedia?.matches ?? false);
 
-        addEventListener('message', e => {
+        addEventListener('message', this.handleMessage);
+    },
+    beforeUnmount() {
+        this.darkMedia?.removeEventListener('change', this.handleColorSchemeChange);
+        removeEventListener('message', this.handleMessage);
+    },
+    methods: {
+        handleColorSchemeChange(e: MediaQueryListEvent) {
+            this.switchTheme(e.matches);
+        },
+        handleMessage(e: MessageEvent) {
             if (typeof e.data.tab == 'string') {
                 this.activeTab = e.data.tab;
                 return;
@@ -250,9 +261,7 @@ export default {
                     addon.log(error);
                 }
             });
-        });
-    },
-    methods: {
+        },
         switchTheme(dark: boolean) {
             this.dark = dark;
             if (dark) document.documentElement.setAttribute('theme-mode', 'dark');

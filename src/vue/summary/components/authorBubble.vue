@@ -1,5 +1,6 @@
 <script lang="ts">
 import type {
+    Chart as HighchartsChart,
     Options,
     PointClickEventObject,
     PointOptionsObject,
@@ -17,7 +18,7 @@ async function processSeries(creatorIDs: number[], themeColors: string[]) {
     async function getSeries(creatorID: number) {
         const zotero = addon.getGlobal('Zotero'),
             itemIDs = await zotero.Creators.getItemsWithCreator(creatorID),
-            itemsPro = itemIDs.map(id => zotero.Items.getAsync(id)),
+            itemsPro = itemIDs.map((id: number) => zotero.Items.getAsync(id)),
             items = await Promise.all(itemsPro),
             dataPro = items.map(async it => {
                 const his = await addon.history.getInTopLevel(it);
@@ -160,13 +161,13 @@ export default defineComponent({
             const topLevels = his
                     .map(history => getHistoryItem(history)?.parentItem)
                     .filter((item): item is Zotero.Item => !!item?.isRegularItem()),
-                creatorIDs = topLevels.map(it => it && (it as any)._creatorIDs).flat(),
+                creatorIDs = topLevels.map(it => ((it as any)._creatorIDs ?? []) as number[]).flat(),
                 uniqueCreatorIDs = Array.from(new Set(creatorIDs)),
                 themeColors =
                     typeof this.theme?.colors[0] == 'string'
                         ? this.theme.colors
                         : (Highcharts.getOptions().colors as string[]),
-                chart = (this.$refs.chart as Chart).chart;
+                chart = (this.$refs.chart as { chart: HighchartsChart }).chart;
 
             chart.showLoading();
             processSeries(uniqueCreatorIDs, themeColors).then(series => {
@@ -184,5 +185,5 @@ export default defineComponent({
 });
 </script>
 <template>
-  <Chart :key="theme" ref="chart" :options="options" style="height: 100%" />
+  <Chart :key="JSON.stringify(theme)" ref="chart" :options="options" style="height: 100%" />
 </template>

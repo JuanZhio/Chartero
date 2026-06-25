@@ -1,8 +1,8 @@
 <script lang="ts">
 import type { Options } from 'highcharts';
-import type { AttachmentHistory } from '$/history/history';
 import { Chart } from 'highcharts-vue';
 import Highcharts from '@/highcharts';
+import type { AttachmentHistory } from '$/history/history';
 export default {
     components: { Chart },
     props: {
@@ -32,7 +32,7 @@ export default {
 </script>
 
 <template>
-  <Chart :key="theme" :options="options" />
+  <Chart :key="JSON.stringify(theme)" :options="options" />
 </template>
 
 <style scoped></style>

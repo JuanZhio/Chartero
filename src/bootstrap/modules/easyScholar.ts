@@ -411,7 +411,9 @@ function filterRankLabels(ranks: RankLabel[]) {
         showOfficialAllFallback = getBooleanPref('easyScholarShowOfficialAllFallback'),
         showCustom = getBooleanPref('easyScholarShowCustom'),
         enabledOfficialKeys = new Set(
-            addon.getPref('easyScholarOfficialRankKeys').map(key => String(key).toLocaleLowerCase()),
+            addon
+                .getPref('easyScholarOfficialRankKeys')
+                .map((key: string) => String(key).toLocaleLowerCase()),
         ),
         enabledOfficial = ranks.filter(
             rank => rank.source != 'custom' && enabledOfficialKeys.has(rank.key.toLocaleLowerCase()),

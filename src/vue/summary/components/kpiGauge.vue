@@ -22,6 +22,7 @@ export default {
         return {
             locale: addon.locale,
             isDark: false,
+            colorScheme: undefined as MediaQueryList | undefined,
             trackColors: Highcharts.getOptions().colors!.map(color =>
                 new Highcharts.Color(color).setOpacity(0.3).get(),
             ),
@@ -144,9 +145,17 @@ export default {
         },
     },
     mounted() {
-        const colorScheme = matchMedia('(prefers-color-scheme: dark)');
-        this.isDark = colorScheme?.matches ?? false;
-        colorScheme?.addEventListener('change', e => (this.isDark = e.matches));
+        this.colorScheme = matchMedia('(prefers-color-scheme: dark)') ?? undefined;
+        this.isDark = this.colorScheme?.matches ?? false;
+        this.colorScheme?.addEventListener('change', this.handleColorSchemeChange);
+    },
+    beforeUnmount() {
+        this.colorScheme?.removeEventListener('change', this.handleColorSchemeChange);
+    },
+    methods: {
+        handleColorSchemeChange(e: MediaQueryListEvent) {
+            this.isDark = e.matches;
+        },
     },
 };
 </script>

@@ -208,14 +208,14 @@ const colTitleOpt = {
         title: { text: addon.locale.fileName },
         labels: {
             format: '{point.name}',
-            style: { textOverflow: 'ellipsis', width: '220px' },
+            style: { textOverflow: 'ellipsis', width: 220 },
         },
     },
     colAuthorOpt = {
         title: { text: addon.locale.author },
         labels: {
             format: '{point.custom.author}',
-            style: { textOverflow: 'ellipsis', width: '116px' },
+            style: { textOverflow: 'ellipsis', width: 116 },
         },
     };
 
@@ -312,7 +312,7 @@ export default defineComponent({
                                 textOutline: 'none',
                             },
                             formatter() {
-                                const point = this.point.options as GanttItem;
+                                const point = (this as any).point.options as GanttItem;
                                 return point.completed > 0.99 ? '100%' : '';
                             },
                         },

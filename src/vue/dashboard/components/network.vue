@@ -52,8 +52,8 @@ export default defineComponent({
         };
     },
     computed: {
-        options() {
-            return Highcharts.merge(this.theme, this.chartOpts);
+        options(): Highcharts.Options {
+            return Highcharts.merge(this.theme ?? {}, this.chartOpts);
         },
         chartOpts() {
             return {

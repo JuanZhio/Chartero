@@ -52,6 +52,11 @@
         "lint": "biome lint .",
         "lint:fix": "biome lint . --write",
         "format": "biome format . --write",
+        "typecheck": "npm run typecheck:worker && npm run typecheck:bootstrap && npm run typecheck:tools && npm run typecheck:vue",
+        "typecheck:bootstrap": "tsc -p src/bootstrap/tsconfig.json --noEmit",
+        "typecheck:tools": "tsc -p tools/tsconfig.json --noEmit",
+        "typecheck:vue": "vue-tsc -p src/vue/tsconfig.json --noEmit",
+        "typecheck:worker": "tsc -p src/worker/tsconfig.json --noEmit",
         "prepare": "husky",
         "git-modules": "git submodule update --init --recursive",
         "test": "tsx tools/history-kernel.test.ts"
